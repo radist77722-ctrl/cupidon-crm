@@ -278,6 +278,22 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 .bal-row{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); font-size:13px;}
 .bal-row:last-child{border-bottom:none;}
 
+.notif-bell{all:unset; cursor:pointer; position:relative; display:flex; align-items:center; gap:6px; margin-top:8px; padding:9px 12px; border-radius:11px; background:rgba(255,255,255,.06); color:#dcd4c3; font-size:12.6px; font-weight:600;}
+.notif-bell:hover{background:rgba(255,255,255,.1);}
+.notif-badge{background:var(--rust); color:#fff; font-size:10.5px; font-weight:700; border-radius:100px; padding:1px 7px; margin-left:auto;}
+.notif-item{display:flex; gap:10px; padding:11px 0; border-bottom:1px solid var(--line); font-size:13px; cursor:pointer;}
+.notif-item:last-child{border-bottom:none;}
+.notif-item:hover{background:var(--paper);}
+
+.msgr-wrap{display:flex; gap:16px; height:65vh; min-height:420px;}
+.msgr-channels{width:220px; flex-shrink:0; background:var(--paper-card); border:1px solid var(--line); border-radius:14px; padding:10px; overflow-y:auto;}
+.msgr-channel{all:unset; cursor:pointer; display:flex; align-items:center; gap:9px; width:100%; padding:9px 10px; border-radius:9px; font-size:13px; margin-bottom:2px;}
+.msgr-channel:hover{background:var(--paper);}
+.msgr-channel.on{background:var(--wine); color:#fff;}
+.msgr-sep{font-size:10.5px; text-transform:uppercase; color:var(--muted); letter-spacing:.05em; padding:8px 10px 4px;}
+.msgr-main{flex:1; display:flex; flex-direction:column; background:var(--paper-card); border:1px solid var(--line); border-radius:14px; padding:16px; min-width:0;}
+.msgr-head{font-family:'Fraunces',serif; font-weight:600; font-size:16px; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--line);}
+
 </style>
 </head>
 <body>
@@ -360,12 +376,17 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9.5c0-1.4 1.3-2.5 3-2.5s3 1 3 2.2c0 3-6 1.5-6 4.5 0 1.3 1.3 2.3 3 2.3s3-1 3-2.3"/></svg>
         Баланс
       </button>
+      <button data-view="messenger">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Мессенджер
+      </button>
       <button data-view="admin" id="navAdminBtn" style="display:none;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2 4 5v6c0 5 3.4 8.5 8 11 4.6-2.5 8-6 8-11V5l-8-3Z"/></svg>
         Админ-панель
       </button>
     </nav>
     <button class="ai-fab" id="aiFabBtn">✨ AI-помощник</button>
+    <button class="notif-bell" id="notifBellBtn">🔔 Уведомления<span class="notif-badge" id="notifBadge" style="display:none;">0</span></button>
     <div class="online-block">
       <div class="online-title">Онлайн сейчас</div>
       <div id="onlineList"></div>
@@ -502,6 +523,21 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
       <div class="card"><h3 class="section-title">Все начисления</h3><div id="balLedger"></div></div>
     </section>
 
+    <section id="view-messenger" style="display:none;">
+      <div class="topbar"><div><h1 class="serif">Мессенджер</h1><p>Общий чат команды и личные сообщения</p></div></div>
+      <div class="msgr-wrap">
+        <div class="msgr-channels" id="msgrChannels"></div>
+        <div class="msgr-main">
+          <div class="msgr-head" id="msgrHead">Общий чат</div>
+          <div class="ai-chat" id="msgrBody" style="flex:1; max-height:none;"></div>
+          <div class="ai-input-row">
+            <textarea class="in" id="msgrInput" placeholder="Написать сообщение…"></textarea>
+            <button class="btn primary" id="msgrSendBtn">Отправить</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section id="view-admin" style="display:none;">
       <div class="topbar"><div><h1 class="serif">Админ-панель</h1><p>Роли, доступ, полная сводка по системе</p></div></div>
       <div id="adminGuard"></div>
@@ -509,9 +545,11 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <div class="kpi-grid" id="adminKpi"></div>
         <div class="card"><h3 class="section-title">Назначение ролей и доступ</h3><div id="roleAssign"></div></div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Открытые проблемы</h3><div id="adminProblems"></div></div>
-        <div class="card" style="margin-top:16px;"><h3 class="section-title">Экспорт</h3>
-          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Выгрузить всю базу анкет в Excel</p>
+        <div class="card" style="margin-top:16px;"><h3 class="section-title">Экспорт и бэкап</h3>
+          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Выгрузить всю базу анкет в Excel — для отчётов</p>
           <button class="btn primary sm" id="exportExcelBtn">Скачать отчёт .xlsx</button>
+          <p style="font-size:12.8px; color:var(--muted); margin:14px 0 10px;">Полный бэкап всей базы (клиенты, задачи, лента, роли, начисления) одним файлом — сохраняй раз в неделю на всякий случай</p>
+          <button class="btn ghost sm" id="backupBtn">📦 Скачать полный бэкап .json</button>
         </div>
       </div>
     </section>
@@ -529,8 +567,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
 
 (function(){
   // ⚠️ ВСТАВЬ СВОИ ДАННЫЕ ИЗ SUPABASE (Project Settings → API):
-  const SUPABASE_URL = 'https://nlciyrfqamqqelkunzoi.supabase.co/rest/v1/';
-  const SUPABASE_ANON_KEY = 'sb_publishable_O-mQN3hrT_4XCITpeiGEWg_NGZRYSGW';
+  const SUPABASE_URL = 'https://ВСТАВЬ-СЮДА.supabase.co';
+  const SUPABASE_ANON_KEY = 'ВСТАВЬ-СЮДА-anon-public-ключ';
 
   const K_IDENTITY = 'crm-identity';
   const K_CLIENTS = 'shared-clients';
@@ -543,6 +581,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   const K_PAYMENTS = 'shared-payments';
   const K_PASSWORDS = 'shared-passwords';
   const K_LEDGER = 'shared-ledger';
+  const K_MESSAGES = 'shared-messages';
+  const K_NOTIF_SEEN = 'notif-lastseen';
 
   // Захардкоженные супер-аккаунты. ВАЖНО: это НЕ безопасно — любой человек с этой
   // ссылкой может открыть код страницы (вид -> исходный код / F12) и увидеть эти
@@ -577,6 +617,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   let lastKnownRole = null;
   let clients = [], tasks = [], activity = [], events = [], presence = {}, roles = {}, people = [], payments = [];
   let passwords = {}, ledger = [];
+  let messages = [];
+  let notifSeen = 0;
+  let activeChannel = 'general';
   let isSuperAdmin = false;
   let aiHistory = [];
   let balPeriodMode = 'month';
@@ -653,6 +696,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     payments = await getShared(K_PAYMENTS, []);
     passwords = await getShared(K_PASSWORDS, {});
     ledger = await getShared(K_LEDGER, []);
+    messages = await getShared(K_MESSAGES, []);
+    notifSeen = await getPersonal(K_NOTIF_SEEN, 0);
   }
 
   // ---------- identity + roles ----------
@@ -764,7 +809,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       await setShared(K_PEOPLE, people);
     }
     if(!roles[name]){
-      roles[name] = Object.keys(roles).length===0 ? 'admin' : 'pending';
+      // раньше первый залогинившийся становился админом — это было нужно, пока
+      // не было фиксированных админ-аккаунтов. Теперь это дыра: сайт публичный,
+      // и случайный человек с ссылкой мог первым занять админку. Убрано —
+      // все новые обычные аккаунты теперь всегда идут на подтверждение.
+      roles[name] = 'pending';
       await setShared(K_ROLES, roles);
     }
     document.getElementById('gate').style.display = 'none';
@@ -817,7 +866,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   }
 
   // ---------- NAV ----------
-  const VIEWS = ['dashboard','deals','clients','tasks','calendar','feed','managers','people','payments','balance','admin'];
+  const VIEWS = ['dashboard','deals','clients','tasks','calendar','feed','managers','people','payments','balance','messenger','admin'];
   function bindNav(navEl){
     navEl.addEventListener('click', (e)=>{
       const btn = e.target.closest('button[data-view]');
@@ -1535,6 +1584,79 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     renderAiChat();
   }
 
+  // ================= NOTIFICATIONS =================
+  function computeNotifications(){
+    const list = [];
+    activity.forEach(a=>{
+      if(a.user===me || !a.clientId) return;
+      const c = clients.find(x=>x.id===a.clientId);
+      if(c && c.manager===me && a.ts>notifSeen){
+        list.push({ts:a.ts, text:`${a.user}: ${a.detail.replace(/<[^>]+>/g,'')}`, clientId:a.clientId});
+      }
+    });
+    tasks.forEach(t=>{
+      if(t.assignee===me && t.createdBy && t.createdBy!==me && t.createdAt>notifSeen){
+        list.push({ts:t.createdAt, text:`${t.createdBy} поставил(а) тебе задачу: «${t.title}»`, clientId:t.clientId});
+      }
+    });
+    return list.sort((a,b)=>b.ts-a.ts).slice(0,40);
+  }
+  function renderNotifBadge(){
+    const n = computeNotifications().length;
+    const badge = document.getElementById('notifBadge');
+    if(!badge) return;
+    if(n>0){ badge.style.display=''; badge.textContent = n>9?'9+':n; } else badge.style.display='none';
+  }
+  document.getElementById('notifBellBtn').addEventListener('click', openNotifPanel);
+  async function openNotifPanel(){
+    const list = computeNotifications();
+    const modal = document.getElementById('modalBox');
+    modal.innerHTML = `
+      <div class="modal-head"><div><h2>🔔 Уведомления</h2><div class="sub">Что случилось по твоим анкетам и задачам</div></div>
+        <button class="close-btn" id="closeModalNotif"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">${list.length ? list.map(n=>`
+        <div class="notif-item" data-cid="${n.clientId||''}"><div>${esc(n.text)}</div></div>`).join('') : '<div class="empty" style="padding:20px;">Новых уведомлений нет</div>'}</div>`;
+    document.getElementById('closeModalNotif').addEventListener('click', closeModal);
+    modal.querySelectorAll('.notif-item[data-cid]').forEach(el=> el.addEventListener('click', ()=>{
+      if(el.dataset.cid){ closeModal(); document.querySelector('#nav button[data-view="clients"]').click(); openClient(el.dataset.cid); }
+    }));
+    document.getElementById('overlay').classList.add('show');
+    notifSeen = Date.now();
+    await setPersonal(K_NOTIF_SEEN, notifSeen);
+    renderNotifBadge();
+  }
+
+  // ================= MESSENGER =================
+  function dmKey(a,b){ return [a,b].sort().join('::'); }
+  function renderMessenger(){
+    const allNames = [...new Set([...knownNames, ...people.map(p=>p.name)])].filter(n=>n!==me);
+    document.getElementById('msgrChannels').innerHTML = `
+      <button class="msgr-channel ${activeChannel==='general'?'on':''}" data-ch="general">💬 Общий чат</button>
+      <div class="msgr-sep">Личные сообщения</div>
+      ${allNames.map(n=>`<button class="msgr-channel ${activeChannel===dmKey(me,n)?'on':''}" data-ch="${esc(dmKey(me,n))}" data-label="${esc(n)}"><span class="avatar sm">${initials(n)}</span>${esc(n)}</button>`).join('')}
+    `;
+    document.querySelectorAll('.msgr-channel').forEach(b=> b.addEventListener('click', ()=>{
+      activeChannel = b.dataset.ch;
+      document.getElementById('msgrHead').textContent = b.dataset.ch==='general' ? 'Общий чат' : b.dataset.label;
+      renderMessenger();
+    }));
+    const body = document.getElementById('msgrBody');
+    const list = messages.filter(m=>m.channel===activeChannel);
+    body.innerHTML = list.length ? list.map(m=>`<div class="ai-msg ${m.from===me?'user':'bot'}"><b style="opacity:.7; font-size:11px; display:block; margin-bottom:2px;">${m.from===me?'Ты':esc(m.from)}</b>${esc(m.text)}</div>`).join('') : '<div class="empty" style="padding:16px;">Сообщений пока нет — напиши первым</div>';
+    body.scrollTop = body.scrollHeight;
+  }
+  document.getElementById('msgrSendBtn').addEventListener('click', sendMsgrMessage);
+  document.getElementById('msgrInput').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMsgrMessage(); } });
+  async function sendMsgrMessage(){
+    const input = document.getElementById('msgrInput');
+    const text = input.value.trim();
+    if(!text) return;
+    messages.push({id:uid(), channel:activeChannel, from:me, text, ts:Date.now()});
+    await setShared(K_MESSAGES, messages);
+    input.value = '';
+    renderMessenger();
+  }
+
   // ================= ADMIN =================
   function renderAdmin(){
     const guard = document.getElementById('adminGuard');
@@ -1637,11 +1759,23 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     XLSX.writeFile(wb, `cupidon-report-${new Date().toISOString().slice(0,10)}.xlsx`);
     logActivity('note', 'выгрузил(а) отчёт Excel');
   });
+  document.getElementById('backupBtn').addEventListener('click', ()=>{
+    const dump = { exportedAt: new Date().toISOString(), clients, tasks, activity, events, roles, people, payments, passwords, ledger, messages };
+    const blob = new Blob([JSON.stringify(dump, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `cupidon-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    logActivity('note', 'скачал(а) полный бэкап базы');
+    showToast('Бэкап скачан');
+  });
 
   // ================= RENDER ALL =================
   function renderAll(){
-    renderDashboard(); renderBoard(); renderClients(); renderTasks(); renderCalendar(); renderFullFeed(); renderManagers(); renderPeople(); renderPayments(); renderBalance(); renderOnline();
+    renderDashboard(); renderBoard(); renderClients(); renderTasks(); renderCalendar(); renderFullFeed(); renderManagers(); renderPeople(); renderPayments(); renderBalance(); renderOnline(); renderNotifBadge();
     if(currentView()==='admin') renderAdmin();
+    if(currentView()==='messenger') renderMessenger();
   }
 
   // ================= LIVE POLLING =================
@@ -1649,13 +1783,13 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function pollLoop(){
     setInterval(async ()=>{
       await touchPresence();
-      const [c,t,a,ev,pr,ro,pe,pa,pw,lg] = await Promise.all([
+      const [c,t,a,ev,pr,ro,pe,pa,pw,lg,ms] = await Promise.all([
         getShared(K_CLIENTS, clients), getShared(K_TASKS, tasks), getShared(K_ACTIVITY, activity),
         getShared(K_EVENTS, events), getShared(K_PRESENCE, presence), getShared(K_ROLES, roles),
         getShared(K_PEOPLE, people), getShared(K_PAYMENTS, payments),
-        getShared(K_PASSWORDS, passwords), getShared(K_LEDGER, ledger)
+        getShared(K_PASSWORDS, passwords), getShared(K_LEDGER, ledger), getShared(K_MESSAGES, messages)
       ]);
-      clients=c; tasks=t; activity=a; events=ev; presence=pr; roles=ro; people=pe; payments=pa; passwords=pw; ledger=lg;
+      clients=c; tasks=t; activity=a; events=ev; presence=pr; roles=ro; people=pe; payments=pa; passwords=pw; ledger=lg; messages=ms;
       myRole = roles[me] || 'pending';
       isSuperAdmin = !!(ADMIN_ACCOUNTS[me] && ADMIN_ACCOUNTS[me].super);
       document.getElementById('navAdminBtn').style.display = myRole==='admin' ? '' : 'none';
