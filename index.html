@@ -6,7 +6,6 @@
 <title>Cupidon — командная CRM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 
@@ -875,7 +874,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       btn.classList.add('active');
       VIEWS.forEach(v=> document.getElementById('view-'+v).style.display = (v===btn.dataset.view)?'':'none');
       document.getElementById('sidebar').classList.remove('open');
-      if(btn.dataset.view==='admin') renderAdmin();
+      renderAll(); // сразу отрисовать открытую вкладку, не ждать следующего тика поллинга
     });
   }
   bindNav(document.getElementById('nav'));
@@ -1098,16 +1097,23 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   document.getElementById('addClientBtn').addEventListener('click', ()=> openClientForm());
 
   // ---- translation via Anthropic API ----
+  // ---------- единый вызов AI через Edge Function (прячет ключ) ----------
+  async function callAI(messages){
+    const resp = await fetch(`${SUPABASE_URL}/functions/v1/ai-proxy`, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
+      body: JSON.stringify({ messages })
+    });
+    const data = await resp.json();
+    if(!resp.ok || data.error) throw new Error(data.error || 'AI proxy error');
+    return data.text || '';
+  }
+
   async function translateClient(c, boxEl){
     boxEl.innerHTML = `<span class="spin"></span> перевожу…`;
     try{
       const prompt = `Переведи на итальянский и на английский следующий текст анкеты для международного брачного агентства. Верни СТРОГО JSON без пояснений и без markdown, формат: {"it_description":"...","it_requirements":"...","en_description":"...","en_requirements":"..."}.\n\nОписание (о себе): ${c.description||'(пусто)'}\n\nТребования к партнёру: ${c.requirements||'(пусто)'}`;
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:1200, messages:[{role:'user', content: prompt}]})
-      });
-      const data = await resp.json();
-      let text = (data.content||[]).map(b=>b.text||'').join('');
+      let text = await callAI([{role:'user', text: prompt}]);
       text = text.trim().replace(/^```json/,'').replace(/^```/,'').replace(/```$/,'').trim();
       const parsed = JSON.parse(text);
       boxEl.innerHTML = `
@@ -1117,7 +1123,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="lang-block"><div class="lang-lbl">English — requirements</div><p>${esc(parsed.en_requirements)}</p></div>
       `;
     }catch(e){
-      boxEl.innerHTML = `<p style="color:var(--rust);">Не удалось перевести автоматически. Попробуй ещё раз чуть позже.</p>`;
+      boxEl.innerHTML = `<p style="color:var(--rust);">Не удалось перевести автоматически (AI-функция не настроена или недоступна). Попробуй ещё раз чуть позже.</p>`;
     }
   }
 
@@ -1570,16 +1576,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     aiHistory.push({role:'user', text}); input.value=''; renderAiChat();
     aiHistory.push({role:'bot', text:'…'}); renderAiChat();
     try{
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({model:'claude-sonnet-4-6', max_tokens:800,
-          messages: aiHistory.filter(m=>m.text!=='…').map(m=>({role:m.role==='user'?'user':'assistant', content:m.text}))})
-      });
-      const data = await resp.json();
-      const reply = (data.content||[]).map(b=>b.text||'').join('') || 'Не удалось получить ответ.';
-      aiHistory[aiHistory.length-1] = {role:'bot', text:reply};
+      const history = aiHistory.filter(m=>m.text!=='…').map(m=>({role:m.role==='user'?'user':'model', text:m.text}));
+      const reply = await callAI(history);
+      aiHistory[aiHistory.length-1] = {role:'bot', text: reply || 'Не удалось получить ответ.'};
     }catch(e){
-      aiHistory[aiHistory.length-1] = {role:'bot', text:'Ошибка запроса к AI. Попробуй ещё раз.'};
+      aiHistory[aiHistory.length-1] = {role:'bot', text:'Ошибка запроса к AI-функции. Проверь, что Edge Function задеплоена и GEMINI_API_KEY настроен в Supabase.'};
     }
     renderAiChat();
   }
@@ -1652,6 +1653,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const text = input.value.trim();
     if(!text) return;
     messages.push({id:uid(), channel:activeChannel, from:me, text, ts:Date.now()});
+    if(messages.length>800) messages = messages.slice(-800); // не даём чату разрастаться бесконечно и тормозить поллинг
     await setShared(K_MESSAGES, messages);
     input.value = '';
     renderMessenger();
@@ -1745,8 +1747,23 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <span><b>${esc(c.name)}</b> — ${esc(c.problemNote)||'без описания'}</span><span style="color:var(--muted);">${esc(c.manager)}</span>
       </div>`).join('') : '<div class="empty" style="padding:20px;">Проблем нет — красота</div>';
   }
-  document.getElementById('exportExcelBtn').addEventListener('click', ()=>{
-    if(typeof XLSX === 'undefined'){ showToast('Модуль экспорта ещё грузится, попробуй через секунду'); return; }
+  // Excel-библиотека тяжёлая (~900кб) и нужна только когда реально жмут
+  // "Экспорт" — грузим её по требованию, а не при каждом открытии сайта.
+  let xlsxLoading = null;
+  function loadXLSX(){
+    if(typeof XLSX !== 'undefined') return Promise.resolve();
+    if(xlsxLoading) return xlsxLoading;
+    xlsxLoading = new Promise((resolve, reject)=>{
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    return xlsxLoading;
+  }
+  document.getElementById('exportExcelBtn').addEventListener('click', async ()=>{
+    showToast('Готовлю файл…');
+    try{ await loadXLSX(); }catch(e){ showToast('Не получилось загрузить модуль экспорта, проверь интернет'); return; }
     const rows = clients.map(c=>({
       '№': c.num||c.id, 'Имя': c.name, 'Возраст': c.age, 'Город': c.city, 'Страны': c.countries,
       'Куратор': c.manager, 'Регер': c.reger, 'Телефон': c.phone, 'Этап': STAGE_MAP[c.stage]||c.stage,
@@ -1772,11 +1789,34 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   });
 
   // ================= RENDER ALL =================
+  // Раньше тут пересобирались ВСЕ разделы каждые 4 сек, даже невидимые —
+  // это и грузило страницу. Теперь тяжёлый рендер идёт только для того
+  // раздела, который реально открыт; лёгкие вещи (онлайн, бейдж уведомлений)
+  // обновляются всегда, они дешёвые.
+  const HEAVY_RENDERERS = {
+    dashboard: renderDashboard,
+    deals: renderBoard,
+    clients: renderClients,
+    tasks: renderTasks,
+    calendar: renderCalendar,
+    feed: renderFullFeed,
+    managers: renderManagers,
+    people: renderPeople,
+    payments: renderPayments,
+    balance: renderBalance,
+    admin: renderAdmin,
+    messenger: renderMessenger,
+  };
   function renderAll(){
-    renderDashboard(); renderBoard(); renderClients(); renderTasks(); renderCalendar(); renderFullFeed(); renderManagers(); renderPeople(); renderPayments(); renderBalance(); renderOnline(); renderNotifBadge();
-    if(currentView()==='admin') renderAdmin();
-    if(currentView()==='messenger') renderMessenger();
+    renderOnline(); renderNotifBadge();
+    const v = currentView();
+    const fn = HEAVY_RENDERERS[v];
+    if(fn) fn();
   }
+  // renderClients() дёргает populateManagerFilter(), которая нужна и другим
+  // местам (канбан, задачи) — оставляем как есть, дорого только если реально
+  // на этой вкладке стоишь.
+
 
   // ================= LIVE POLLING =================
   function modalOpenGuard(){ return document.getElementById('overlay').classList.contains('show'); }
