@@ -407,9 +407,9 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         Админ-панель
       </button>
     </nav>
-    <button class="ai-fab" id="aiFabBtn">✨ AI-помощник</button>
     <button class="notif-bell" id="notifBellBtn">🔔 Уведомления<span class="notif-badge" id="notifBadge" style="display:none;">0</span></button>
     <button class="shift-btn off" id="shiftBtn" style="display:none;">▶ Начать смену</button>
+    <button class="notif-bell" id="rateLinkFabBtn">🔗 Ссылка на отзыв</button>
     <div class="online-block">
       <div class="online-title">Онлайн сейчас</div>
       <div id="onlineList"></div>
@@ -665,7 +665,6 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   let notifSeen = 0;
   let activeChannel = 'general';
   let isSuperAdmin = false;
-  let aiHistory = [];
   let balPeriodMode = 'month';
   const managers = window.__MANAGERS__ || [];
   // Люди, которых сразу видно в списке входа, но без пароля-админа —
@@ -1179,33 +1178,34 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
 
   // ---- translation via Anthropic API ----
   // ---------- единый вызов AI через Edge Function (прячет ключ) ----------
-  async function callAI(messages){
-    const resp = await fetch(`${SUPABASE_URL}/functions/v1/ai-proxy`, {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ messages })
-    });
-    const data = await resp.json();
-    if(!resp.ok || data.error) throw new Error(data.error || 'AI proxy error');
-    return data.text || '';
+  // Простой бесплатный перевод без всякого AI-прокси и настроек — работает
+  // из коробки, ничего в Supabase для этого настраивать не нужно.
+  async function translateText(text, targetLang){
+    if(!text) return '';
+    try{
+      const resp = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ru|${targetLang}`);
+      const data = await resp.json();
+      if(data.responseData && data.responseData.translatedText) return data.responseData.translatedText;
+      throw new Error('empty');
+    }catch(e){
+      return '(не удалось перевести — попробуй ещё раз)';
+    }
   }
 
   async function translateClient(c, boxEl){
     boxEl.innerHTML = `<span class="spin"></span> перевожу…`;
-    try{
-      const prompt = `Переведи на итальянский и на английский следующий текст анкеты для международного брачного агентства. Верни СТРОГО JSON без пояснений и без markdown, формат: {"it_description":"...","it_requirements":"...","en_description":"...","en_requirements":"..."}.\n\nОписание (о себе): ${c.description||'(пусто)'}\n\nТребования к партнёру: ${c.requirements||'(пусто)'}`;
-      let text = await callAI([{role:'user', text: prompt}]);
-      text = text.trim().replace(/^```json/,'').replace(/^```/,'').replace(/```$/,'').trim();
-      const parsed = JSON.parse(text);
-      boxEl.innerHTML = `
-        <div class="lang-block"><div class="lang-lbl">Italiano — о себе</div><p>${esc(parsed.it_description)}</p></div>
-        <div class="lang-block"><div class="lang-lbl">Italiano — requisiti</div><p>${esc(parsed.it_requirements)}</p></div>
-        <div class="lang-block"><div class="lang-lbl">English — about her</div><p>${esc(parsed.en_description)}</p></div>
-        <div class="lang-block"><div class="lang-lbl">English — requirements</div><p>${esc(parsed.en_requirements)}</p></div>
-      `;
-    }catch(e){
-      boxEl.innerHTML = `<p style="color:var(--rust);">Не удалось перевести автоматически (AI-функция не настроена или недоступна). Попробуй ещё раз чуть позже.</p>`;
-    }
+    const [itDesc, itReq, enDesc, enReq] = await Promise.all([
+      translateText(c.description, 'it'),
+      translateText(c.requirements, 'it'),
+      translateText(c.description, 'en'),
+      translateText(c.requirements, 'en'),
+    ]);
+    boxEl.innerHTML = `
+      <div class="lang-block"><div class="lang-lbl">Italiano — о себе</div><p>${esc(itDesc||'—')}</p></div>
+      <div class="lang-block"><div class="lang-lbl">Italiano — requisiti</div><p>${esc(itReq||'—')}</p></div>
+      <div class="lang-block"><div class="lang-lbl">English — about her</div><p>${esc(enDesc||'—')}</p></div>
+      <div class="lang-block"><div class="lang-lbl">English — requirements</div><p>${esc(enReq||'—')}</p></div>
+    `;
   }
 
   function openClient(id){
@@ -1725,47 +1725,34 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       </div>`).join('') : '<div class="empty" style="padding:20px;">Начислений пока нет</div>';
   }
 
-  // ================= AI ASSISTANT =================
-  document.getElementById('aiFabBtn').addEventListener('click', openAiChat);
-  function openAiChat(){
+  // ---------- отдельная кнопка "получить ссылку на отзыв" — сначала выбери анкету ----------
+  document.getElementById('rateLinkFabBtn').addEventListener('click', ()=>{
     const modal = document.getElementById('modalBox');
+    const my = scoped(clients).filter(c=>c.manager); // только те, где вообще есть менеджер
     modal.innerHTML = `
-      <div class="modal-head"><div><h2>✨ AI-помощник</h2><div class="sub">На базе Claude — спроси что угодно по работе с анкетами</div></div>
-        <button class="close-btn" id="closeModalAi"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-head"><div><h2>🔗 Ссылка на отзыв</h2><div class="sub">Сначала укажи, на какую анкету оставляют отзыв</div></div>
+        <button class="close-btn" id="closeModalRL"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
-        <div class="ai-chat" id="aiChatBody"></div>
-        <div class="ai-input-row">
-          <textarea class="in" id="aiInput" placeholder="Например: помоги составить ответ клиенту, который просит скидку"></textarea>
-          <button class="btn primary" id="aiSendBtn">Спросить</button>
+        <div class="field"><label>Анкета *</label>
+          <select class="in" id="rl_client"><option value="">— выбери анкету —</option>${my.map(c=>`<option value="${c.id}">№${esc(c.num||c.id)} — ${esc(c.name)} (менеджер: ${esc(c.manager)})</option>`).join('')}</select>
         </div>
+        <div id="rlResult"></div>
       </div>`;
-    document.getElementById('closeModalAi').addEventListener('click', closeModal);
-    renderAiChat();
-    document.getElementById('aiSendBtn').addEventListener('click', sendAiMessage);
-    document.getElementById('aiInput').addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendAiMessage(); } });
+    document.getElementById('closeModalRL').addEventListener('click', closeModal);
+    document.getElementById('rl_client').addEventListener('change', (e)=>{
+      const res = document.getElementById('rlResult');
+      if(!e.target.value){ res.innerHTML=''; return; }
+      const url = `${location.origin}${location.pathname}?rate=${encodeURIComponent(e.target.value)}`;
+      res.innerHTML = `<div class="block"><h4>Готово</h4>
+        <div class="login-box"><span class="mono" style="word-break:break-all;">${esc(url)}</span></div>
+        <button class="btn primary sm" id="rlCopyBtn" style="margin-top:10px;">Скопировать ссылку</button></div>`;
+      document.getElementById('rlCopyBtn').addEventListener('click', async ()=>{
+        try{ await navigator.clipboard.writeText(url); showToast('Ссылка скопирована'); }
+        catch(err){ prompt('Скопируй вручную:', url); }
+      });
+    });
     document.getElementById('overlay').classList.add('show');
-  }
-  function renderAiChat(){
-    const body = document.getElementById('aiChatBody');
-    if(!body) return;
-    body.innerHTML = aiHistory.length ? aiHistory.map(m=>`<div class="ai-msg ${m.role==='user'?'user':'bot'}">${esc(m.text)}</div>`).join('') : '<div class="empty" style="padding:16px;">Спроси что-нибудь — например, помочь с ответом клиенту или перевести фразу</div>';
-    body.scrollTop = body.scrollHeight;
-  }
-  async function sendAiMessage(){
-    const input = document.getElementById('aiInput');
-    const text = input.value.trim();
-    if(!text) return;
-    aiHistory.push({role:'user', text}); input.value=''; renderAiChat();
-    aiHistory.push({role:'bot', text:'…'}); renderAiChat();
-    try{
-      const history = aiHistory.filter(m=>m.text!=='…').map(m=>({role:m.role==='user'?'user':'model', text:m.text}));
-      const reply = await callAI(history);
-      aiHistory[aiHistory.length-1] = {role:'bot', text: reply || 'Не удалось получить ответ.'};
-    }catch(e){
-      aiHistory[aiHistory.length-1] = {role:'bot', text:'Ошибка запроса к AI-функции. Проверь, что Edge Function задеплоена и GEMINI_API_KEY настроен в Supabase.'};
-    }
-    renderAiChat();
-  }
+  });
 
   // ================= NOTIFICATIONS =================
   function computeNotifications(){
@@ -2143,6 +2130,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       try{ currentReviews = await getShared(K_REVIEWS, []); }catch(e){}
       currentReviews.push({id:uid(), manager:c.manager, clientId:c.id, clientName:c.name, stars:picked, comment, from:'Клиентка (сама, по ссылке)', source:'client', ts:Date.now()});
       try{ await setShared(K_REVIEWS, currentReviews); }catch(e){}
+      // публичная страница не грузит обычную ленту приложения — пишем в неё
+      // напрямую, чтобы админ увидел отзыв в "Лента / история"
+      try{
+        const currentActivity = await getShared(K_ACTIVITY, []);
+        currentActivity.unshift({id:uid(), ts:Date.now(), user:'Клиентка', action:'note',
+          detail:`оставила отзыв ${picked}★ менеджеру <b>${esc(c.manager)}</b> по анкете <b>${esc(c.name)}</b>${comment?`: «${esc(comment)}»`:''}`,
+          clientId:c.id});
+        await setShared(K_ACTIVITY, currentActivity.slice(0,300));
+      }catch(e){}
       body.innerHTML = `<div class="rate-thanks"><div class="icon">💌</div><h1>Спасибо!</h1><p>Оценка отправлена. Это окно можно закрыть.</p></div>`;
     }
     draw();
