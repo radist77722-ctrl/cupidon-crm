@@ -1188,17 +1188,42 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       if(data.responseData && data.responseData.translatedText) return data.responseData.translatedText;
       throw new Error('empty');
     }catch(e){
-      return '(не удалось перевести — попробуй ещё раз)';
+      return '(не удалось перевести этот кусок)';
     }
+  }
+  // Бесплатный переводчик режет запросы длиннее 500 символов — режем длинный
+  // текст на куски по предложениям (не разрывая слова) и переводим по очереди.
+  function chunkText(text, maxLen=450){
+    if(!text) return [];
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    const chunks = []; let cur = '';
+    sentences.forEach(s=>{
+      if((cur+' '+s).trim().length > maxLen){
+        if(cur) chunks.push(cur.trim());
+        if(s.length > maxLen){ for(let i=0;i<s.length;i+=maxLen) chunks.push(s.slice(i,i+maxLen)); cur=''; }
+        else cur = s;
+      }else{
+        cur = (cur+' '+s).trim();
+      }
+    });
+    if(cur) chunks.push(cur.trim());
+    return chunks;
+  }
+  async function translateLong(text, targetLang){
+    const chunks = chunkText(text);
+    if(!chunks.length) return '';
+    const results = [];
+    for(const ch of chunks){ results.push(await translateText(ch, targetLang)); }
+    return results.join(' ');
   }
 
   async function translateClient(c, boxEl){
     boxEl.innerHTML = `<span class="spin"></span> перевожу…`;
     const [itDesc, itReq, enDesc, enReq] = await Promise.all([
-      translateText(c.description, 'it'),
-      translateText(c.requirements, 'it'),
-      translateText(c.description, 'en'),
-      translateText(c.requirements, 'en'),
+      translateLong(c.description, 'it'),
+      translateLong(c.requirements, 'it'),
+      translateLong(c.description, 'en'),
+      translateLong(c.requirements, 'en'),
     ]);
     boxEl.innerHTML = `
       <div class="lang-block"><div class="lang-lbl">Italiano — о себе</div><p>${esc(itDesc||'—')}</p></div>
