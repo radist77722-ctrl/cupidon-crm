@@ -565,9 +565,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
 <script>
 
 (function(){
-  // ⚠️ ВСТАВЬ СВОИ ДАННЫЕ ИЗ SUPABASE (Project Settings → API):
-  const SUPABASE_URL = 'https://ВСТАВЬ-СЮДА.supabase.co';
-  const SUPABASE_ANON_KEY = 'ВСТАВЬ-СЮДА-anon-public-ключ';
+  // Данные подключения к Supabase (проект пользователя):
+  const SUPABASE_URL = 'https://nlciyrfqamqqelkunzoi.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_O-mQN3hrT_4XCITpeiGEWg_NGZRYSGW';
 
   const K_IDENTITY = 'crm-identity';
   const K_CLIENTS = 'shared-clients';
@@ -801,7 +801,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   async function finishLogin(name){
     me = name;
     await setPersonal(K_IDENTITY, name);
-    roles = await getShared(K_ROLES, {});
+    // Не затираем роль, которую могли только что поставить сами (например,
+    // сразу перед этим вводом пароля админа) — сливаем свежие данные с сервера
+    // с тем, что уже знаем локально, отдавая приоритет локальному.
+    const freshRoles = await getShared(K_ROLES, {});
+    roles = {...freshRoles, ...roles};
     people = await getShared(K_PEOPLE, []);
     if(!people.find(p=>p.name===name)){
       people.push({name, firstSeen:Date.now()});
@@ -822,7 +826,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     enterApp();
   }
   async function resolveRole(){
-    roles = await getShared(K_ROLES, {});
+    const freshRoles = await getShared(K_ROLES, {});
+    roles = {...freshRoles, ...roles};
+    // Для 4 захардкоженных админ-аккаунтов роль вообще не должна зависеть от
+    // того, успела ли база данных ответить вовремя — раз пароль подошёл,
+    // роль 'admin' гарантирована железно, без гонки состояний.
+    if(ADMIN_ACCOUNTS[me]){
+      roles[me] = 'admin';
+      await setShared(K_ROLES, roles);
+    }
     myRole = roles[me] || 'pending';
     isSuperAdmin = !!(ADMIN_ACCOUNTS[me] && ADMIN_ACCOUNTS[me].super);
   }
