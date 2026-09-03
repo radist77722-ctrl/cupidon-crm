@@ -143,7 +143,7 @@ select{cursor:pointer;}
 .board-tabs button{all:unset; cursor:pointer; padding:9px 16px; border-radius:10px; font-size:13px; font-weight:600; border:1px solid var(--line); color:var(--ink-soft);}
 .board-tabs button.on{background:var(--wine); border-color:var(--wine); color:#fff;}
 .board{display:flex; gap:14px; overflow-x:auto; padding-bottom:12px;}
-.col{background:#efe9dd; border-radius:14px; padding:12px; min-width:240px; max-width:260px; flex-shrink:0; display:flex; flex-direction:column; border-top:4px solid var(--line);}
+.col{background:#efe9dd; border-radius:14px; padding:12px; min-width:240px; max-width:260px; min-height:460px; flex-shrink:0; display:flex; flex-direction:column; border-top:4px solid var(--line);}
 .col.stage-new{border-top-color:var(--blue);}
 .col.stage-ready{border-top-color:var(--gold);}
 .col.stage-searching{border-top-color:var(--sage);}
@@ -154,7 +154,7 @@ select{cursor:pointer;}
 .col-head{display:flex; justify-content:space-between; align-items:center; padding:4px 6px 10px;}
 .col-head .t{font-size:12px; font-weight:700;}
 .col-head .c{font-size:10.8px; color:var(--muted); background:var(--paper-card); padding:2px 8px; border-radius:100px;}
-.col-body{display:flex; flex-direction:column; gap:8px; min-height:40px;}
+.col-body{display:flex; flex-direction:column; gap:8px; min-height:40px; flex:1;}
 .col-body.dragover{background:rgba(179,137,58,.15); border-radius:10px;}
 .dcard{background:var(--paper-card); border:1px solid var(--line); border-radius:11px; padding:11px 12px; cursor:grab; box-shadow:0 1px 2px rgba(0,0,0,.04);}
 .dcard:active{cursor:grabbing;}
@@ -234,6 +234,14 @@ select{cursor:pointer;}
 .candidates span{background:var(--paper); border:1px solid var(--line); border-radius:100px; padding:4px 11px; font-size:11.8px;}
 .status-row{display:flex; gap:8px; flex-wrap:wrap;}
 .status-btn{all:unset; cursor:pointer; padding:7px 12px; border-radius:9px; font-size:11.8px; font-weight:600; border:1px solid var(--line);}
+.status-btn.stage-new{background:var(--blue-bg); color:var(--blue); border-color:transparent;}
+.status-btn.stage-ready{background:#fbeecb; color:#93701c; border-color:transparent;}
+.status-btn.stage-searching{background:var(--sage-bg); color:var(--sage); border-color:transparent;}
+.status-btn.stage-all_found{background:#e8dff0; color:#6a3f96; border-color:transparent;}
+.status-btn.stage-closed_won{background:var(--violet-bg); color:var(--violet); border-color:transparent;}
+.status-btn.stage-problem{background:var(--rust-bg); color:var(--rust); border-color:transparent;}
+.status-btn.stage-refund{background:#efe0e0; color:#8f2d3a; border-color:transparent;}
+.status-btn.active-stage{outline:2px solid currentColor; outline-offset:1px;}
 .action-row{display:flex; gap:8px; flex-wrap:wrap;}
 textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-family:'Inter',sans-serif; font-size:13px; resize:vertical; background:var(--paper); color:var(--ink);}
 .login-box{display:flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:12.2px; background:var(--paper); border:1px solid var(--line); padding:8px 12px; border-radius:9px;}
@@ -259,7 +267,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
   .main{padding:20px 16px 50px;}
   .menu-toggle{display:flex !important;}
 }
-.menu-toggle{display:none; all:unset; cursor:pointer; width:36px; height:36px; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:9px; margin-bottom:14px;}
+.menu-toggle{all:unset; display:none; cursor:pointer; width:36px; height:36px; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:9px; margin-bottom:14px;}
 
 .btn.danger{background:transparent; border-color:var(--rust); color:var(--rust);}
 .btn.danger:hover{background:var(--rust-bg);}
@@ -429,7 +437,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     </button>
 
     <section id="view-dashboard">
-      <div class="topbar"><div><h1 class="serif">Дашборд</h1><p>Сводка по клиентам, сделкам и задачам за выбранный период</p></div></div>
+      <div class="topbar"><div><h1>Дашборд</h1><p>Сводка по клиентам, сделкам и задачам за выбранный период</p></div></div>
       <div class="period-bar">
         <button class="chip" data-period="week">Эта неделя</button>
         <button class="chip on" data-period="month">Этот месяц</button>
@@ -447,7 +455,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-deals" style="display:none;">
       <div class="topbar">
-        <div><h1 class="serif">Сделки</h1><p id="dealsSub">Тяни карточки между этапами — видно всем вживую</p></div>
+        <div><h1>Сделки</h1><p id="dealsSub">Тяни карточки между этапами — видно всем вживую</p></div>
         <button class="btn primary" id="addDealBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Новая сделка</button>
       </div>
       <div class="board-tabs">
@@ -462,7 +470,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-clients" style="display:none;">
       <div class="topbar">
-        <div><h1 class="serif">Анкеты клиенток</h1><p id="clientsSub">—</p></div>
+        <div><h1>Анкеты клиенток</h1><p id="clientsSub">—</p></div>
         <button class="btn primary" id="addClientBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Новая анкета</button>
       </div>
       <div class="controls">
@@ -482,7 +490,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-tasks" style="display:none;">
       <div class="topbar">
-        <div><h1 class="serif">Задачи</h1><p>С исполнителями и дедлайнами</p></div>
+        <div><h1>Задачи</h1><p>С исполнителями и дедлайнами</p></div>
         <button class="btn primary" id="addTaskBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Новая задача</button>
       </div>
       <div class="controls">
@@ -497,7 +505,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-calendar" style="display:none;">
       <div class="topbar">
-        <div><h1 class="serif">Календарь</h1><p>Дедлайны задач и события команды</p></div>
+        <div><h1>Календарь</h1><p>Дедлайны задач и события команды</p></div>
         <div class="cal-nav">
           <button id="calPrev">&larr;</button>
           <div class="serif" id="calLabel" style="min-width:150px; text-align:center; font-size:15px;"></div>
@@ -510,12 +518,12 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     </section>
 
     <section id="view-feed" style="display:none;">
-      <div class="topbar"><div><h1 class="serif">Лента активности</h1><p>История всех действий команды</p></div></div>
+      <div class="topbar"><div><h1>Лента активности</h1><p>История всех действий команды</p></div></div>
       <div class="card" id="fullFeed"></div>
     </section>
 
     <section id="view-managers" style="display:none;">
-      <div class="topbar"><div><h1 class="serif">Менеджеры и рейтинг</h1><p>Планы, часы, заработок, распределение анкет и регистрации</p></div></div>
+      <div class="topbar"><div><h1>Менеджеры и рейтинг</h1><p>Планы, часы, заработок, распределение анкет и регистрации</p></div></div>
       <p style="font-size:12px; color:var(--muted); margin:-8px 0 16px; max-width:640px;">Рейтинг (жёлтая цифра на карточке, 0-100) — среднее трёх метрик примерно поровну: скорость поиска мужчин, число закрытых анкет и средняя оценка отзывов. Если по метрике нет данных — она просто не участвует в среднем, никого не топит незаслуженно.</p>
       <div class="mgr-grid" id="mgrGrid"></div>
       <div class="card" style="margin-top:16px;">
@@ -537,20 +545,20 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     </section>
 
     <section id="view-people" style="display:none;">
-      <div class="topbar"><div><h1 class="serif">Люди</h1><p>Команда, роли и нагрузка каждого</p></div></div>
+      <div class="topbar"><div><h1>Люди</h1><p>Команда, роли и нагрузка каждого</p></div></div>
       <div class="card" id="peopleList"></div>
     </section>
 
     <section id="view-payments" style="display:none;">
       <div class="topbar">
-        <div><h1 class="serif">Оплаты</h1><p>Заявки на пополнение прокси / инструментов</p></div>
+        <div><h1>Оплаты</h1><p>Заявки на пополнение прокси / инструментов</p></div>
         <button class="btn primary" id="addPayBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Заявка на оплату</button>
       </div>
       <div id="payList"></div>
     </section>
 
     <section id="view-balance" style="display:none;">
-      <div class="topbar"><div><h1 class="serif">Баланс</h1><p>Начисления менеджерам и регерам за выбранный период</p></div></div>
+      <div class="topbar"><div><h1>Баланс</h1><p>Начисления менеджерам и регерам за выбранный период</p></div></div>
       <div class="period-bar">
         <button class="chip" data-bperiod="week">Эта неделя</button>
         <button class="chip on" data-bperiod="month">Этот месяц</button>
@@ -563,7 +571,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     </section>
 
     <section id="view-messenger" style="display:none;">
-      <div class="topbar"><div><h1 class="serif">Мессенджер</h1><p>Общий чат команды и личные сообщения</p></div></div>
+      <div class="topbar"><div><h1>Мессенджер</h1><p>Общий чат команды и личные сообщения</p></div></div>
       <div class="msgr-wrap">
         <div class="msgr-channels" id="msgrChannels"></div>
         <div class="msgr-main">
@@ -578,7 +586,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     </section>
 
     <section id="view-admin" style="display:none;">
-      <div class="topbar"><div><h1 class="serif">Админ-панель</h1><p>Роли, доступ, полная сводка по системе</p></div></div>
+      <div class="topbar"><div><h1>Админ-панель</h1><p>Роли, доступ, полная сводка по системе</p></div></div>
       <div id="adminGuard"></div>
       <div id="adminContent" style="display:none;">
         <div class="kpi-grid" id="adminKpi"></div>
@@ -1124,9 +1132,12 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   }));
   function populateManagerFilter(){
     const sel = document.getElementById('managerFilter'); const cur = sel.value;
+    // менеджеру этот фильтр не нужен — он и так видит только свои анкеты,
+    // а disabled-выпадашка выглядела как сломанная кнопка. Просто прячем.
+    sel.style.display = myRole==='manager' ? 'none' : '';
     const names = [...new Set(scoped(clients).map(c=>c.manager).filter(Boolean))].sort();
     sel.innerHTML = '<option value="">Все менеджеры</option>' + names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
-    sel.value = cur; sel.disabled = myRole==='manager';
+    sel.value = cur;
     const stSel = document.getElementById('stageFilter'); const curSt = stSel.value;
     stSel.innerHTML = '<option value="">Все этапы</option>' + ALL_STAGES.map(s=>`<option value="${s.id}">${s.label}</option>`).join('');
     stSel.value = curSt;
@@ -1219,17 +1230,14 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
 
   async function translateClient(c, boxEl){
     boxEl.innerHTML = `<span class="spin"></span> перевожу…`;
-    const [itDesc, itReq, enDesc, enReq] = await Promise.all([
-      translateLong(c.description, 'it'),
-      translateLong(c.requirements, 'it'),
-      translateLong(c.description, 'en'),
-      translateLong(c.requirements, 'en'),
+    const combined = [c.description, c.requirements].filter(Boolean).join('\n\n');
+    const [it, en] = await Promise.all([
+      translateLong(combined, 'it'),
+      translateLong(combined, 'en'),
     ]);
     boxEl.innerHTML = `
-      <div class="lang-block"><div class="lang-lbl">Italiano — о себе</div><p>${esc(itDesc||'—')}</p></div>
-      <div class="lang-block"><div class="lang-lbl">Italiano — requisiti</div><p>${esc(itReq||'—')}</p></div>
-      <div class="lang-block"><div class="lang-lbl">English — about her</div><p>${esc(enDesc||'—')}</p></div>
-      <div class="lang-block"><div class="lang-lbl">English — requirements</div><p>${esc(enReq||'—')}</p></div>
+      <div class="lang-block"><div class="lang-lbl">Italiano</div><p>${esc(it||'—')}</p></div>
+      <div class="lang-block"><div class="lang-lbl">English</div><p>${esc(en||'—')}</p></div>
     `;
   }
 
@@ -1249,7 +1257,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <button class="close-btn" id="closeModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="modal-body">
-        <div class="status-row">${ALL_STAGES.map(s=>`<button class="status-btn" data-s="${s.id}" style="${c.stage===s.id?`background:var(--sage-bg); border-color:var(--sage); color:var(--sage);`:''}">${s.label}</button>`).join('')}</div>
+        <div class="status-row">${ALL_STAGES.map(s=>`<button class="status-btn stage-${s.id}${c.stage===s.id?' active-stage':''}" data-s="${s.id}">${s.label}</button>`).join('')}</div>
         <div class="action-row">
           <button class="btn ghost sm" id="translateBtn">🌍 Перевести на IT / EN</button>
           <button class="btn ghost sm" id="problemBtn" style="border-color:var(--rust); color:var(--rust);">🚫 Проблема</button>
