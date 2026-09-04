@@ -109,6 +109,7 @@ button{font-family:inherit;}
 .pill.high{background:var(--rust-bg); color:var(--rust);}
 .pill.role-admin{background:var(--wine); color:#fff;}
 .pill.role-manager{background:var(--blue-bg); color:var(--blue);}
+.pill.role-curator{background:#fbeecb; color:#93701c;}
 .pill.role-pending{background:#efe0e0; color:var(--rust);}
 .pill.role-reger{background:var(--sage-bg); color:var(--sage);}
 .dot{width:6px; height:6px; border-radius:50%; background:currentColor;}
@@ -172,7 +173,8 @@ select{cursor:pointer;}
 
 .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
 .cal-dow{font-size:10.8px; color:var(--muted); text-align:center; padding-bottom:4px; font-weight:600;}
-.cal-cell{background:var(--paper-card); border:1px solid var(--line); border-radius:9px; min-height:84px; padding:6px; font-size:10.8px;}
+.cal-cell{background:var(--paper-card); border:1px solid var(--line); border-radius:9px; min-height:84px; padding:6px; font-size:10.8px; cursor:pointer; transition:border-color .15s;}
+.cal-cell:not(.other):hover{border-color:var(--gold);}
 .cal-cell.other{opacity:.35;}
 .cal-cell.today{border-color:var(--wine); border-width:2px;}
 .cal-daynum{font-weight:700; font-size:12px; margin-bottom:4px;}
@@ -505,7 +507,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-calendar" style="display:none;">
       <div class="topbar">
-        <div><h1>Календарь</h1><p>Дедлайны задач и события команды</p></div>
+        <div><h1>Календарь</h1><p>Клик по дню — быстро добавить событие. Дедлайны задач подтягиваются сами.</p></div>
         <div class="cal-nav">
           <button id="calPrev">&larr;</button>
           <div class="serif" id="calLabel" style="min-width:150px; text-align:center; font-size:15px;"></div>
@@ -513,8 +515,16 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
           <button class="btn primary sm" id="addEventBtn" style="margin-left:8px;">+ событие</button>
         </div>
       </div>
-      <div class="cal-grid" id="calDow"></div>
-      <div class="cal-grid" id="calGrid" style="margin-top:6px;"></div>
+      <div style="display:flex; gap:16px; align-items:flex-start;">
+        <div style="flex:1; min-width:0;">
+          <div class="cal-grid" id="calDow"></div>
+          <div class="cal-grid" id="calGrid" style="margin-top:6px;"></div>
+        </div>
+        <div class="card" style="width:250px; flex-shrink:0;">
+          <h3 class="section-title">Ближайшее</h3>
+          <div id="calUpcoming"></div>
+        </div>
+      </div>
     </section>
 
     <section id="view-feed" style="display:none;">
@@ -659,7 +669,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   const STAGE_MAP = Object.fromEntries(ALL_STAGES.map(s=>[s.id,s.label]));
   const TASK_STATUS = {todo:'Не начата', doing:'В работе', done:'Готово'};
   const PRIORITY = {low:'Низкий', medium:'Средний', high:'Высокий'};
-  const ROLE_LABEL = {admin:'Админ', manager:'Менеджер', reger:'Регер', pending:'Ожидает подтверждения'};
+  const ROLE_LABEL = {admin:'Админ', curator:'Куратор', manager:'Менеджер', reger:'Регер', pending:'Ожидает подтверждения'};
 
   let me = null;
   let myRole = 'pending';
@@ -678,7 +688,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   // Люди, которых сразу видно в списке входа, но без пароля-админа —
   // при первом входе идут на обычное подтверждение, как любой новый человек.
   const EXTRA_PINNED_NAMES = ['Максим'];
-  const ROLE_PRESETS = { 'Максим': 'reger' }; // сразу нужная роль, без ожидания подтверждения
+  const ROLE_PRESETS = { 'Максим': 'reger', 'Александра': 'curator', 'София': 'curator' }; // сразу нужная роль, без ожидания подтверждения
   const knownNames = [...new Set([...managers.map(m=>m.name), ...EXTRA_PINNED_NAMES])];
   let currentBoard = 'work';
   let boardManagerFilter = '';
@@ -1068,11 +1078,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const oldStage = c.stage;
     const oldLabel = STAGE_MAP[oldStage];
     c.stage = newStage;
-    // регер получает $1 за перевод из "новой заявки" в "анкета готова" — ОДИН раз за анкету, навсегда
+    // регер получает $1 за перевод из "новой заявки" в "анкета готова" — ОДИН раз за анкету,
+    // навсегда. Обычные менеджеры это начисление получать не должны — только реальный регер:
+    // либо тот, кто явно привязан к анкете (c.reger), либо тот, кто сам сейчас в роли регера.
     if(oldStage==='new' && newStage==='ready' && !c.registrationPaid){
-      c.registrationPaid = true;
-      const payTo = c.reger || me;
-      await addLedgerEntry({person:payTo, amount:1, currency:'USD', reason:`Регистрация анкеты «${c.name}»`, clientId:c.id, createdBy:me});
+      const payTo = c.reger || (myRole==='reger' ? me : null);
+      if(payTo){
+        c.registrationPaid = true;
+        await addLedgerEntry({person:payTo, amount:1, currency:'USD', reason:`Регистрация анкеты «${c.name}»`, clientId:c.id, createdBy:me});
+      }
     }
     await setShared(K_CLIENTS, clients);
     await logActivity('move', `перевёл(а) <b>${esc(c.name)}</b> из «${oldLabel}» в «${STAGE_MAP[newStage]}»`, c.id);
@@ -1420,7 +1434,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function openClientForm(){
     const modal = document.getElementById('modalBox');
     modal.innerHTML = `
-      <div class="modal-head"><div><h2>Новая анкета / сделка</h2><div class="sub">Появится сразу в базе и на канбане у всех</div></div>
+      <div class="modal-head"><div><h2>Новая анкета / сделка</h2><div class="sub">Менеджера потом назначит куратор — сейчас анкета уйдёт в «Свободные»</div></div>
         <button class="close-btn" id="closeModal2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div class="field-row">
@@ -1428,8 +1442,6 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <div class="field"><label>Возраст</label><input class="in" id="f_age"></div>
           <div class="field"><label>Город</label><input class="in" id="f_city"></div>
           <div class="field"><label>Телефон</label><input class="in" id="f_phone"></div>
-          <div class="field"><label>Менеджер</label><input class="in" id="f_manager" value="${esc(myRole==='manager'?me:'')}"></div>
-          <div class="field"><label>Регер</label><input class="in" id="f_reger" value="${esc(myRole==='reger'?me:'')}"></div>
           <div class="field"><label>Ищет в странах</label><input class="in" id="f_countries"></div>
         </div>
         <div class="block"><h4>Требования к партнёру</h4><textarea class="note" id="f_req"></textarea></div>
@@ -1439,13 +1451,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     document.getElementById('saveNewClient').addEventListener('click', async ()=>{
       const name = document.getElementById('f_name').value.trim();
       if(!name){ document.getElementById('f_name').focus(); return; }
+      // нормальная сквозная нумерация анкет, а не случайный id в шапке карточки
+      const maxNum = clients.reduce((m,x)=>{ const n=parseInt(x.num,10); return (!isNaN(n) && n>m) ? n : m; }, 0);
       const c = {
-        id: uid(), num:'', name,
+        id: uid(), num: String(maxNum+1), name,
         age: document.getElementById('f_age').value.trim(),
         city: document.getElementById('f_city').value.trim(),
         phone: document.getElementById('f_phone').value.trim(),
-        manager: document.getElementById('f_manager').value.trim(),
-        reger: document.getElementById('f_reger').value.trim(),
+        manager: '',
+        reger: '',
         countries: document.getElementById('f_countries').value.trim(),
         requirements: document.getElementById('f_req').value.trim(),
         description:'', ageRange:'', candidates:[], comment:'', note:'', login:'', problemNote:'',
@@ -1548,18 +1562,22 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       const dayEvents = events.filter(e=>e.date===cell.date);
       const dayTasks = tasks.filter(t=>t.dueDate===cell.date);
       const isToday = cell.date===todayStr;
-      return `<div class="cal-cell ${isToday?'today':''}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" title="${esc(e.title)}">${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
+      return `<div class="cal-cell ${isToday?'today':''}" data-date="${cell.date}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" title="${esc(e.title)}">${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
     }).join('');
+    document.querySelectorAll('#calGrid .cal-cell:not(.other)').forEach(cell=>{
+      cell.addEventListener('click', ()=> openEventForm(cell.dataset.date));
+    });
+    renderUpcoming();
   }
   document.getElementById('calPrev').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()-1); renderCalendar(); });
   document.getElementById('calNext').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()+1); renderCalendar(); });
-  document.getElementById('addEventBtn').addEventListener('click', ()=>{
+  function openEventForm(prefillDate){
     const modal = document.getElementById('modalBox');
     modal.innerHTML = `
       <div class="modal-head"><div><h2>Новое событие</h2></div><button class="close-btn" id="closeModal4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
         <div class="field"><label>Название *</label><input class="in" id="e_title"></div>
-        <div class="field"><label>Дата *</label><input class="in" type="date" id="e_date" value="${new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Дата *</label><input class="in" type="date" id="e_date" value="${prefillDate || new Date().toISOString().slice(0,10)}"></div>
         <button class="btn primary" id="saveEvent" style="align-self:flex-start;">Добавить в календарь</button>
       </div>`;
     document.getElementById('closeModal4').addEventListener('click', closeModal);
@@ -1573,7 +1591,23 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       closeModal(); renderAll(); showToast('Событие добавлено');
     });
     document.getElementById('overlay').classList.add('show');
-  });
+  }
+  document.getElementById('addEventBtn').addEventListener('click', ()=> openEventForm());
+  // Список ближайших событий/дедлайнов сбоку от сетки — как в Битриксе, чтобы
+  // не листать месяц туда-сюда ради того, что «на носу».
+  function renderUpcoming(){
+    const el = document.getElementById('calUpcoming');
+    if(!el) return;
+    const todayStr = new Date().toISOString().slice(0,10);
+    const upcomingEvents = events.filter(e=>e.date>=todayStr).map(e=>({...e, kind:'event'}));
+    const upcomingTasks = tasks.filter(t=>t.dueDate && t.dueDate>=todayStr && t.status!=='done').map(t=>({...t, date:t.dueDate, kind:'task'}));
+    const list = [...upcomingEvents, ...upcomingTasks].sort((a,b)=> a.date.localeCompare(b.date)).slice(0,10);
+    el.innerHTML = list.length ? list.map(x=>`
+      <div style="display:flex; justify-content:space-between; gap:8px; padding:9px 0; border-bottom:1px solid var(--line); font-size:12.5px;">
+        <span>${x.kind==='task'?'✓ ':'📌 '}${esc(x.title)}</span>
+        <span style="color:var(--muted); white-space:nowrap;">${new Date(x.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric', month:'short'})}</span>
+      </div>`).join('') : '<div class="empty" style="padding:14px;">Впереди пусто</div>';
+  }
 
   // ================= FEED =================
   const ACTION_COLOR = {create:'var(--sage)', move:'var(--gold)', note:'var(--blue)', task:'var(--wine)', event:'var(--ink)', problem:'var(--rust)'};
@@ -1592,7 +1626,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   // итоговый рейтинг — среднее по тем метрикам, где есть данные (чтобы
   // отсутствие отзывов не топило человека незаслуженно).
   function computeManagerMetrics(){
-    const names = [...new Set([...managers.map(m=>m.name), ...clients.map(c=>c.manager).filter(Boolean)])];
+    const roleNames = Object.keys(roles).filter(n=> roles[n]==='manager' || roles[n]==='curator');
+    const names = [...new Set([...managers.map(m=>m.name), ...roleNames, ...clients.map(c=>c.manager).filter(Boolean)])];
     const raw = {};
     names.forEach(n=>{
       const mine = clients.filter(c=>c.manager===n);
@@ -1634,13 +1669,23 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     return (h/24).toFixed(1)+' дн';
   }
 
+  // Раньше тут были только те, кто был в исходной таблице отчётности —
+  // теперь показываем вообще всех менеджеров и кураторов, включая тех, кто
+  // подтверждён позже через Люди/Админку, даже без исторических планов.
+  function getAllManagerEntries(){
+    const extra = Object.keys(roles).filter(n=> (roles[n]==='manager'||roles[n]==='curator') && !managers.some(m=>m.name===n));
+    const synthetic = extra.map(n=>({name:n, planAnk:0, factAnk:0, cleanMen:0, scammers:0, hoursMonth:0, earnedTotal:0, planMonth:0, weeks:[0,0,0,0]}));
+    return [...managers, ...synthetic];
+  }
   function renderManagers(){
     const metrics = computeManagerMetrics();
-    document.getElementById('mgrGrid').innerHTML = managers.map(m=>{
-      const pct = Math.min(100, Math.round(m.factAnk/m.planAnk*100));
+    const allManagers = getAllManagerEntries();
+    document.getElementById('mgrGrid').innerHTML = allManagers.map(m=>{
+      const pct = m.planAnk ? Math.min(100, Math.round(m.factAnk/m.planAnk*100)) : 0;
       const met = metrics[m.name] || {};
+      const roleLabel = ROLE_LABEL[roles[m.name]] || 'Менеджер';
       return `<div class="mgr-card">
-        <div class="mgr-head"><div class="avatar" style="background:var(--wine);">${initials(m.name)}</div><div><div class="nm">${esc(m.name)}</div><div style="font-size:12px; color:var(--muted);">Менеджер</div></div>
+        <div class="mgr-head"><div class="avatar" style="background:var(--wine);">${initials(m.name)}</div><div><div class="nm">${esc(m.name)}</div><div style="font-size:12px; color:var(--muted);">${esc(roleLabel)}</div></div>
           <div style="margin-left:auto; text-align:right;"><div style="font-family:'Fraunces',serif; font-weight:700; font-size:22px; color:var(--gold);">${met.score!=null?met.score:'—'}</div><div style="font-size:10px; color:var(--muted);">рейтинг</div></div>
         </div>
         <div class="progress-wrap"><div class="progress-lbl"><span>Анкеты: план ${m.planAnk} / факт ${m.factAnk}</span><span class="mono">${pct}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div></div>
@@ -1669,16 +1714,33 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
 
   // ================= PEOPLE =================
   function renderPeople(){
+    const canConfirm = myRole==='admin' || myRole==='curator';
     const allNames = [...new Set([...knownNames, ...people.map(p=>p.name)])];
     document.getElementById('peopleList').innerHTML = allNames.map(n=>{
       const cnt = clients.filter(c=>c.manager===n).length;
       const role = roles[n] || 'pending';
+      if(role==='pending' && canConfirm){
+        return `<div class="people-row" style="background:var(--rust-bg); border-radius:10px; padding:10px 12px; margin-bottom:2px;">
+          <div class="avatar">${initials(n)}</div>
+          <div class="people-main"><div class="people-name">${esc(n)}</div><div class="people-count" style="color:var(--rust);">Ждёт подтверждения</div></div>
+          <button class="btn primary sm" data-pconfirm="${esc(n)}" data-role="manager">Как менеджера</button>
+          <button class="btn ghost sm" data-pconfirm="${esc(n)}" data-role="reger">Как регера</button>
+        </div>`;
+      }
       return `<div class="people-row">
         <div class="avatar">${initials(n)}</div>
         <div class="people-main"><div class="people-name">${esc(n)}${n===me?' (ты)':''}</div><div class="people-count">${cnt} анкет в работе</div></div>
         ${pill('role-'+role, {['role-'+role]: ROLE_LABEL[role]})}
       </div>`;
     }).join('') || '<div class="empty">Пока никого нет</div>';
+    document.querySelectorAll('#peopleList [data-pconfirm]').forEach(btn=> btn.addEventListener('click', async ()=>{
+      const n = btn.dataset.pconfirm, r = btn.dataset.role;
+      roles[n] = r;
+      await setShared(K_ROLES, roles);
+      await logActivity('note', `подтвердил(а) <b>${esc(n)}</b> как «${ROLE_LABEL[r]}»`);
+      showToast(`${n}: ${ROLE_LABEL[r]}`);
+      renderPeople();
+    }));
   }
 
   // ================= PAYMENTS =================
@@ -1912,6 +1974,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <select class="role-select" data-n="${esc(n)}" ${canEdit?'':'disabled'}>
           <option value="pending" ${roles[n]==='pending'?'selected':''}>Ожидает подтверждения</option>
           <option value="manager" ${roles[n]==='manager'?'selected':''}>Менеджер</option>
+          <option value="curator" ${roles[n]==='curator'?'selected':''}>Куратор</option>
           <option value="reger" ${roles[n]==='reger'?'selected':''}>Регер</option>
           <option value="admin" ${roles[n]==='admin'?'selected':''}>Админ</option>
         </select>
