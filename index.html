@@ -709,6 +709,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   // у window.storage — поэтому весь остальной код CRM ниже не пришлось менять.
   const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+  // Защита от гонки состояний: пока наша собственная запись летит на сервер
+  // (или только что улетела), параллельный 4-секундный опрос может успеть
+  // прочитать ЕЩЁ старые данные и затереть то, что мы только что поставили
+  // локально. Помечаем ключ как "недавно записан нами" на несколько секунд —
+  // на это время опрос не имеет права перезаписать его значением с сервера,
+  // даже если оно пришло позже нашего клика по времени получения ответа.
+  const recentLocalWrites = {};
+  function isRecentLocalWrite(key){ return (Date.now() - (recentLocalWrites[key]||0)) < 3000; }
+
   async function getShared(key, fallback){
     try{
       const { data, error } = await supa.from('crm_kv').select('value').eq('key', key).maybeSingle();
@@ -718,6 +727,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     return fallback;
   }
   async function setShared(key, val){
+    recentLocalWrites[key] = Date.now();
     try{
       const { error } = await supa.from('crm_kv').upsert({ key, value: val, updated_at: new Date().toISOString() });
       if(error) throw error;
@@ -2111,7 +2121,19 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         getShared(K_PASSWORDS, passwords), getShared(K_LEDGER, ledger), getShared(K_MESSAGES, messages),
         getShared(K_REVIEWS, reviews), getShared(K_SHIFTS, shifts)
       ]);
-      clients=c; tasks=t; activity=a; events=ev; presence=pr; roles=ro; people=pe; payments=pa; passwords=pw; ledger=lg; messages=ms; reviews=rv; shifts=sh;
+      clients = isRecentLocalWrite(K_CLIENTS) ? clients : c;
+      tasks = isRecentLocalWrite(K_TASKS) ? tasks : t;
+      activity = isRecentLocalWrite(K_ACTIVITY) ? activity : a;
+      events = isRecentLocalWrite(K_EVENTS) ? events : ev;
+      presence = pr; // presence обновляется постоянно самим же поллингом, гонка тут не страшна
+      roles = isRecentLocalWrite(K_ROLES) ? roles : ro;
+      people = isRecentLocalWrite(K_PEOPLE) ? people : pe;
+      payments = isRecentLocalWrite(K_PAYMENTS) ? payments : pa;
+      passwords = isRecentLocalWrite(K_PASSWORDS) ? passwords : pw;
+      ledger = isRecentLocalWrite(K_LEDGER) ? ledger : lg;
+      messages = isRecentLocalWrite(K_MESSAGES) ? messages : ms;
+      reviews = isRecentLocalWrite(K_REVIEWS) ? reviews : rv;
+      shifts = isRecentLocalWrite(K_SHIFTS) ? shifts : sh;
       myRole = roles[me] || 'pending';
       isSuperAdmin = !!(ADMIN_ACCOUNTS[me] && ADMIN_ACCOUNTS[me].super);
       document.getElementById('navAdminBtn').style.display = myRole==='admin' ? '' : 'none';
