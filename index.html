@@ -121,7 +121,7 @@ button{font-family:inherit;}
 .search svg{width:15px; height:15px; color:var(--muted); flex-shrink:0;}
 select,.btn,input.in,textarea.in{font-family:'Inter',sans-serif; font-size:13px; border:1px solid var(--line); background:var(--paper-card); border-radius:10px; padding:9px 12px; color:var(--ink);}
 select{cursor:pointer;}
-.btn{display:inline-flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; white-space:nowrap;}
+.btn{display:inline-flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; white-space:nowrap; flex-shrink:0;}
 .btn.primary{background:var(--wine); border-color:var(--wine); color:#fff;}
 .btn.primary:hover{background:var(--wine-deep);}
 .btn.ghost:hover{background:var(--paper);}
@@ -144,7 +144,7 @@ select{cursor:pointer;}
 .board-tabs button{all:unset; cursor:pointer; padding:9px 16px; border-radius:10px; font-size:13px; font-weight:600; border:1px solid var(--line); color:var(--ink-soft);}
 .board-tabs button.on{background:var(--wine); border-color:var(--wine); color:#fff;}
 .board{display:flex; gap:14px; overflow-x:auto; padding-bottom:12px; align-items:flex-start;}
-.col{background:#efe9dd; border-radius:14px; padding:12px; min-width:240px; max-width:260px; min-height:180px; flex-shrink:0; display:flex; flex-direction:column; border-top:4px solid var(--line);}
+.col{background:#efe9dd; border-radius:14px; padding:12px; flex:1 1 280px; min-width:240px; max-width:400px; min-height:180px; display:flex; flex-direction:column; border-top:4px solid var(--line);}
 .col.stage-new{border-top-color:var(--blue);}
 .col.stage-ready{border-top-color:var(--gold);}
 .col.stage-searching{border-top-color:var(--sage);}
@@ -581,10 +581,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         </div>
         <div id="shiftStats"></div>
       </div>
-      <div class="grid-2" style="margin-top:16px;">
-        <div class="card"><h3 class="section-title">У кого сколько анкет</h3><div id="byMgrCount"></div></div>
-        <div class="card"><h3 class="section-title">Статистика регеров (регистрации)</h3><div id="byRegerCount"></div></div>
-      </div>
+      <div class="card" style="margin-top:16px;"><h3 class="section-title">У кого сколько анкет</h3><div id="byMgrCount"></div></div>
     </section>
 
     <section id="view-people" style="display:none;">
@@ -1821,10 +1818,6 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const maxMgr = Math.max(1, ...Object.values(byMgr));
     document.getElementById('byMgrCount').innerHTML = Object.entries(byMgr).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;"><div style="width:110px; font-size:12px;">${esc(n)}</div><div style="flex:1; background:var(--paper); border-radius:100px; height:11px; overflow:hidden;"><div style="width:${(c/maxMgr*100).toFixed(0)}%; background:var(--wine); height:100%;"></div></div><div style="width:20px; text-align:right; font-size:12px; color:var(--muted);">${c}</div></div>`).join('') || '<div class="empty" style="padding:10px;">Нет данных</div>';
-    const byReger = {}; clients.forEach(c=>{ if(c.reger){ byReger[c.reger]=(byReger[c.reger]||0)+1; } });
-    const maxReger = Math.max(1, ...Object.values(byReger));
-    document.getElementById('byRegerCount').innerHTML = Object.keys(byReger).length ? Object.entries(byReger).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;"><div style="width:110px; font-size:12px;">${esc(n)}</div><div style="flex:1; background:var(--paper); border-radius:100px; height:11px; overflow:hidden;"><div style="width:${(c/maxReger*100).toFixed(0)}%; background:var(--sage); height:100%;"></div></div><div style="width:20px; text-align:right; font-size:12px; color:var(--muted);">${c}</div></div>`).join('') : '<div class="empty" style="padding:10px;">Регеры пока не привязаны к анкетам</div>';
   }
 
   // ================= PEOPLE =================
