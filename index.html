@@ -88,7 +88,7 @@ button{font-family:inherit;}
 @media (max-width:980px){.grid-2{grid-template-columns:1fr;}}
 
 .period-bar{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:18px;}
-.period-bar select,.period-bar input{font-family:'Inter',sans-serif; font-size:12.8px; border:1px solid var(--line); background:var(--paper-card); border-radius:9px; padding:8px 11px; color:var(--ink);}
+.period-bar select,.period-bar input{font-family:'Inter',sans-serif; font-size:12.3px; border:1px solid var(--line); background:var(--paper-card); border-radius:9px; padding:6px 9px; color:var(--ink); max-width:132px;}
 .chip{all:unset; cursor:pointer; padding:6px 13px; border-radius:100px; font-size:12px; font-weight:600; border:1px solid var(--line); color:var(--ink-soft);}
 .chip.on{background:var(--ink); border-color:var(--ink); color:#fff;}
 
@@ -121,7 +121,7 @@ button{font-family:inherit;}
 .search svg{width:15px; height:15px; color:var(--muted); flex-shrink:0;}
 select,.btn,input.in,textarea.in{font-family:'Inter',sans-serif; font-size:13px; border:1px solid var(--line); background:var(--paper-card); border-radius:10px; padding:9px 12px; color:var(--ink);}
 select{cursor:pointer;}
-.btn{display:inline-flex; align-items:center; gap:6px; font-weight:600; cursor:pointer;}
+.btn{display:inline-flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; white-space:nowrap;}
 .btn.primary{background:var(--wine); border-color:var(--wine); color:#fff;}
 .btn.primary:hover{background:var(--wine-deep);}
 .btn.ghost:hover{background:var(--paper);}
@@ -134,7 +134,7 @@ select{cursor:pointer;}
 .clients-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:14px;}
 .cclient{background:var(--paper-card); border:1px solid var(--line); border-radius:13px; padding:16px; cursor:pointer; transition:border-color .15s, transform .1s; display:flex; flex-direction:column; gap:8px; position:relative;}
 .cclient:hover{border-color:var(--gold); transform:translateY(-2px);}
-.cclient .top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
+.cclient .top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;}
 .cclient .nm{font-family:'Fraunces',serif; font-size:16.5px; font-weight:600; display:flex; align-items:center; gap:6px;}
 .cclient .meta{font-size:11.8px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 10px;}
 .cclient .req{font-size:12.3px; color:var(--ink-soft); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.45;}
@@ -144,7 +144,7 @@ select{cursor:pointer;}
 .board-tabs button{all:unset; cursor:pointer; padding:9px 16px; border-radius:10px; font-size:13px; font-weight:600; border:1px solid var(--line); color:var(--ink-soft);}
 .board-tabs button.on{background:var(--wine); border-color:var(--wine); color:#fff;}
 .board{display:flex; gap:14px; overflow-x:auto; padding-bottom:12px;}
-.col{background:#efe9dd; border-radius:14px; padding:12px; min-width:240px; max-width:260px; min-height:460px; flex-shrink:0; display:flex; flex-direction:column; border-top:4px solid var(--line);}
+.col{background:#efe9dd; border-radius:14px; padding:12px; min-width:240px; max-width:260px; min-height:180px; flex-shrink:0; display:flex; flex-direction:column; border-top:4px solid var(--line);}
 .col.stage-new{border-top-color:var(--blue);}
 .col.stage-ready{border-top-color:var(--gold);}
 .col.stage-searching{border-top-color:var(--sage);}
@@ -550,7 +550,8 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-managers" style="display:none;">
       <div class="topbar"><div><h1>Менеджеры и рейтинг</h1><p>Планы, часы, заработок, распределение анкет и регистрации</p></div></div>
-      <p style="font-size:12px; color:var(--muted); margin:-8px 0 16px; max-width:640px;">Рейтинг (жёлтая цифра на карточке, 0-100) — среднее трёх метрик примерно поровну: 1) скорость поиска мужчин (от момента, когда анкету взяли в подбор, до 3/3 — считается только рабочее время по сменам, не календарные дни); 2) скорость закрытия анкеты (от взятия в подбор до «Закрыта успешно», тоже по рабочему времени); 3) средняя оценка отзывов. Если по метрике нет данных — она просто не участвует в среднем, никого не топит незаслуженно.</p>
+      <p style="font-size:12px; color:var(--muted); margin:-8px 0 16px;">Жёлтая цифра на карточке (0-100) — рейтинг по скорости поиска, скорости закрытия и отзывам. <a href="#" id="ratingFormulaLink" style="color:var(--wine); text-decoration:underline;">Как считается?</a></p>
+      <div id="ratingFormulaDetail" class="card" style="display:none; margin:-8px 0 16px; font-size:12.3px; color:var(--ink-soft); line-height:1.6;">Три метрики, вес поровну — если по какой-то нет данных, она просто не участвует в среднем: <b>скорость поиска</b> (от взятия анкеты в подбор до 3/3 мужчин, считаются только рабочие смены); <b>скорость закрытия</b> (от взятия в подбор до «Закрыта успешно», тоже по сменам); <b>отзывы</b> — средняя оценка звёзд.</div>
       <p style="font-size:11.5px; color:var(--muted); margin:-10px 0 16px; max-width:640px;">Метрики времени считаются только для анкет, у которых уже зафиксирован момент «взяли в подбор» — это происходит автоматически с сегодняшнего дня. По старым анкетам, где этого момента ещё нет, метрика просто не в счёт.</p>
       <div class="mgr-grid" id="mgrGrid"></div>
       <div class="card" style="margin-top:16px;">
@@ -1160,7 +1161,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="col-head"><span class="t">${col.label}</span><span class="c">${items.length}</span></div>
         <div class="col-body" ${dropAttr}>
           ${items.map(c=>`<div class="dcard" draggable="true" data-id="${c.id}">
-            <div class="nm">${c.priority?'⭐ ':''}<span class="mono" style="font-size:10.5px; color:var(--muted); font-weight:600;">№${esc(c.num||'—')}</span> ${esc(c.name)}${c.age?', '+esc(c.age):''}</div>
+            <div><div class="mono" style="font-size:10.5px; color:var(--muted); font-weight:600; margin-bottom:2px;">№${esc(c.num||'—')}</div><div class="nm">${c.priority?'⭐ ':''}${esc(c.name)}${c.age?', '+esc(c.age):''}</div></div>
             <div style="font-size:11px; color:var(--muted);">${esc(c.city)||'—'}</div>
             <div class="meta"><span>${esc(c.manager)||'без менеджера'}</span><div class="avatar sm">${initials(c.manager)}</div></div>
           </div>`).join('')}
@@ -1243,7 +1244,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="top">
           <div style="display:flex; gap:10px; align-items:center;">
             <div class="avatar">${initials(c.name)}</div>
-            <div><div class="nm">${c.priority?'⭐ ':''}<span class="mono" style="font-size:10.5px; color:var(--muted); font-weight:600;">№${esc(c.num||'—')}</span> ${esc(c.name)}${c.age?', '+esc(c.age):''}</div><div class="meta"><span>${esc(c.city)||'город не указан'}</span></div></div>
+            <div><div class="mono" style="font-size:10.5px; color:var(--muted); font-weight:600; margin-bottom:2px;">№${esc(c.num||'—')}</div><div class="nm">${c.priority?'⭐ ':''}${esc(c.name)}${c.age?', '+esc(c.age):''}</div><div class="meta"><span>${esc(c.city)||'город не указан'}</span></div></div>
           </div>
           ${pill(c.stage, STAGE_MAP)}
         </div>
@@ -1770,6 +1771,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const synthetic = extra.map(n=>({name:n, planAnk:0, factAnk:0, cleanMen:0, scammers:0, hoursMonth:0, earnedTotal:0, planMonth:0, weeks:[0,0,0,0]}));
     return [...managers, ...synthetic];
   }
+  document.getElementById('ratingFormulaLink')?.addEventListener('click', (e)=>{
+    e.preventDefault();
+    const el = document.getElementById('ratingFormulaDetail');
+    el.style.display = el.style.display==='none' ? '' : 'none';
+  });
   function renderManagers(){
     const metrics = computeManagerMetrics();
     const allManagers = getAllManagerEntries();
