@@ -152,6 +152,8 @@ select{cursor:pointer;}
 .col.stage-closed_won{border-top-color:var(--violet);}
 .col.stage-problem{border-top-color:var(--rust);}
 .col.stage-refund{border-top-color:#8f2d3a;}
+.col.stage-men1{border-top-color:#a884c9;}
+.col.stage-men2{border-top-color:#8a5cb0;}
 .col-head{display:flex; justify-content:space-between; align-items:center; padding:4px 6px 10px;}
 .col-head .t{font-size:12px; font-weight:700;}
 .col-head .c{font-size:10.8px; color:var(--muted); background:var(--paper-card); padding:2px 8px; border-radius:100px;}
@@ -457,11 +459,12 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-deals" style="display:none;">
       <div class="topbar">
-        <div><h1>Сделки</h1><p id="dealsSub">Тяни карточки между этапами — видно всем вживую</p></div>
+        <div><h1>Сделки</h1><p id="dealsSub">Анкеты, где ещё нет ни одного мужчины — обычный путь по этапам</p></div>
         <button class="btn primary" id="addDealBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Новая сделка</button>
       </div>
       <div class="board-tabs">
-        <button class="on" data-board="work">Рабочие аккаунты</button>
+        <button class="on" data-board="nomen">Без мужчин</button>
+        <button data-board="men">Ход поиска (1-2-3)</button>
         <button data-board="problem">Проблемные аккаунты</button>
       </div>
       <div class="controls" id="boardMgrFilterWrap" style="display:none;">
@@ -534,7 +537,8 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-managers" style="display:none;">
       <div class="topbar"><div><h1>Менеджеры и рейтинг</h1><p>Планы, часы, заработок, распределение анкет и регистрации</p></div></div>
-      <p style="font-size:12px; color:var(--muted); margin:-8px 0 16px; max-width:640px;">Рейтинг (жёлтая цифра на карточке, 0-100) — среднее трёх метрик примерно поровну: скорость поиска мужчин, число закрытых анкет и средняя оценка отзывов. Если по метрике нет данных — она просто не участвует в среднем, никого не топит незаслуженно.</p>
+      <p style="font-size:12px; color:var(--muted); margin:-8px 0 16px; max-width:640px;">Рейтинг (жёлтая цифра на карточке, 0-100) — среднее трёх метрик примерно поровну: 1) скорость поиска мужчин (от момента, когда анкету взяли в подбор, до 3/3 — считается только рабочее время по сменам, не календарные дни); 2) скорость закрытия анкеты (от взятия в подбор до «Закрыта успешно», тоже по рабочему времени); 3) средняя оценка отзывов. Если по метрике нет данных — она просто не участвует в среднем, никого не топит незаслуженно.</p>
+      <p style="font-size:11.5px; color:var(--muted); margin:-10px 0 16px; max-width:640px;">Метрики времени считаются только для анкет, у которых уже зафиксирован момент «взяли в подбор» — это происходит автоматически с сегодняшнего дня. По старым анкетам, где этого момента ещё нет, метрика просто не в счёт.</p>
       <div class="mgr-grid" id="mgrGrid"></div>
       <div class="card" style="margin-top:16px;">
         <h3 class="section-title">Рабочее время по сменам</h3>
@@ -667,6 +671,22 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   ];
   const ALL_STAGES = [...STAGES_WORK, ...STAGES_PROBLEM];
   const STAGE_MAP = Object.fromEntries(ALL_STAGES.map(s=>[s.id,s.label]));
+  // Канбан "Сделки" разбит на 2 отдельные вкладки: анкеты, где мужчин ещё нет
+  // (обычный путь этапов), и анкеты, где мужчины уже находятся (там колонки —
+  // это количество найденных мужчин, а не этап). Это только для отображения
+  // канбана — сам этап (c.stage) и модалка карточки как были, так и остались.
+  const COLS_NOMEN = [
+    {id:'new', label:'Новая заявка (не зарегистрирована)', test:c=>c.stage==='new', dropStage:'new'},
+    {id:'ready', label:'Анкета готова к работе', test:c=>c.stage==='ready', dropStage:'ready'},
+    {id:'searching', label:'В подборе', test:c=>c.stage==='searching' && (c.candidates||[]).length===0, dropStage:'searching'},
+    {id:'closed_won', label:'Закрыта успешно', test:c=>c.stage==='closed_won', dropStage:'closed_won'},
+  ];
+  const COLS_MEN = [
+    {id:'men1', label:'1 мужчина', test:c=>c.stage==='searching' && (c.candidates||[]).length===1, dropStage:null},
+    {id:'men2', label:'2 мужчины', test:c=>c.stage==='searching' && (c.candidates||[]).length===2, dropStage:null},
+    {id:'all_found', label:'Все мужчины найдены (3 из 3)', test:c=>c.stage==='all_found', dropStage:'all_found'},
+  ];
+  const COLS_PROBLEM = STAGES_PROBLEM.map(s=>({...s, test:c=>c.stage===s.id, dropStage:s.id}));
   const TASK_STATUS = {todo:'Не начата', doing:'В работе', done:'Готово'};
   const PRIORITY = {low:'Низкий', medium:'Средний', high:'Высокий'};
   const ROLE_LABEL = {admin:'Админ', curator:'Куратор', manager:'Менеджер', reger:'Регер', pending:'Ожидает подтверждения'};
@@ -690,7 +710,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   const EXTRA_PINNED_NAMES = ['Максим'];
   const ROLE_PRESETS = { 'Максим': 'reger', 'Александра': 'curator', 'София': 'curator' }; // сразу нужная роль, без ожидания подтверждения
   const knownNames = [...new Set([...managers.map(m=>m.name), ...EXTRA_PINNED_NAMES])];
-  let currentBoard = 'work';
+  let currentBoard = 'nomen';
   let boardManagerFilter = '';
   let periodMode = 'month';
 
@@ -1048,7 +1068,12 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   document.querySelectorAll('.board-tabs button').forEach(b=> b.addEventListener('click', ()=>{
     document.querySelectorAll('.board-tabs button').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); currentBoard = b.dataset.board;
-    document.getElementById('dealsSub').textContent = currentBoard==='work' ? 'Тяни карточки между этапами — видно всем вживую' : 'Проблемные анкеты и возвраты — зона ответственности регеров';
+    const subs = {
+      nomen: 'Анкеты, где ещё нет ни одного мужчины — обычный путь по этапам',
+      men: 'Анкеты в активном поиске — колонки по числу найденных мужчин (кликом, не перетаскиванием)',
+      problem: 'Проблемные анкеты и возвраты — зона ответственности регеров',
+    };
+    document.getElementById('dealsSub').textContent = subs[currentBoard] || '';
     renderBoard();
   }));
   // ---------- начисления (баланс) ----------
@@ -1078,6 +1103,10 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const oldStage = c.stage;
     const oldLabel = STAGE_MAP[oldStage];
     c.stage = newStage;
+    // фиксируем метки времени, нужные для расчёта рейтинга по рабочему времени:
+    // когда менеджер реально взял анкету в работу и когда она закрылась.
+    if(newStage==='searching' && !c.searchingStartedAt) c.searchingStartedAt = Date.now();
+    if(newStage==='closed_won') c.closedAt = Date.now();
     // регер получает $1 за перевод из "новой заявки" в "анкета готова" — ОДИН раз за анкету,
     // навсегда. Обычные менеджеры это начисление получать не должны — только реальный регер:
     // либо тот, кто явно привязан к анкете (c.reger), либо тот, кто сам сейчас в роли регера.
@@ -1093,11 +1122,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   }
 
   function renderBoard(){
-    const stages = currentBoard==='work' ? STAGES_WORK : STAGES_PROBLEM;
+    const cols = currentBoard==='nomen' ? COLS_NOMEN : currentBoard==='men' ? COLS_MEN : COLS_PROBLEM;
     // фильтр "все / конкретный менеджер" видят только админ и регер — менеджеру
     // и так показываются только его аккаунты, для него этот фильтр смысла не имеет
     const filterWrap = document.getElementById('boardMgrFilterWrap');
-    if(myRole==='admin' || myRole==='reger'){
+    if(myRole==='admin' || myRole==='reger' || myRole==='curator'){
       filterWrap.style.display = '';
       const sel = document.getElementById('boardManagerFilter');
       const cur = sel.value || boardManagerFilter;
@@ -1111,11 +1140,12 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     let my = scoped(clients);
     if(boardManagerFilter) my = my.filter(c=>c.manager===boardManagerFilter);
     const board = document.getElementById('board');
-    board.innerHTML = stages.map(s=>{
-      const items = my.filter(c=>c.stage===s.id);
-      return `<div class="col stage-${s.id}" data-stage="${s.id}">
-        <div class="col-head"><span class="t">${s.label}</span><span class="c">${items.length}</span></div>
-        <div class="col-body" data-stage="${s.id}">
+    board.innerHTML = cols.map(col=>{
+      const items = my.filter(col.test);
+      const dropAttr = col.dropStage ? `data-stage="${col.dropStage}"` : `data-nodrop="1"`;
+      return `<div class="col stage-${col.id}" data-stage="${col.id}">
+        <div class="col-head"><span class="t">${col.label}</span><span class="c">${items.length}</span></div>
+        <div class="col-body" ${dropAttr}>
           ${items.map(c=>`<div class="dcard" draggable="true" data-id="${c.id}">
             <div class="nm">${c.priority?'⭐ ':''}${esc(c.name)}${c.age?', '+esc(c.age):''}</div>
             <div style="font-size:11px; color:var(--muted);">${esc(c.city)||'—'}</div>
@@ -1131,6 +1161,10 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       card.addEventListener('dragend', ()=> card.classList.remove('dragging'));
     });
     board.querySelectorAll('.col-body').forEach(colBody=>{
+      // колонки "1 мужчина" / "2 мужчины" — это просто витрина по количеству
+      // найденных, а не отдельный этап; туда специально нельзя перетащить
+      // карточку, потому что менять количество мужчин надо кнопкой в карточке
+      if(colBody.dataset.nodrop) return;
       colBody.addEventListener('dragover', (e)=>{ e.preventDefault(); colBody.classList.add('dragover'); });
       colBody.addEventListener('dragleave', ()=> colBody.classList.remove('dragover'));
       colBody.addEventListener('drop', async (e)=>{
@@ -1562,7 +1596,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       const dayEvents = events.filter(e=>e.date===cell.date);
       const dayTasks = tasks.filter(t=>t.dueDate===cell.date);
       const isToday = cell.date===todayStr;
-      return `<div class="cal-cell ${isToday?'today':''}" data-date="${cell.date}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" title="${esc(e.title)}">${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
+      return `<div class="cal-cell ${isToday?'today':''}" data-date="${cell.date}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" title="${esc(e.title)}">${e.startTime?esc(e.startTime)+' ':''}${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
     }).join('');
     document.querySelectorAll('#calGrid .cal-cell:not(.other)').forEach(cell=>{
       cell.addEventListener('click', ()=> openEventForm(cell.dataset.date));
@@ -1576,18 +1610,30 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     modal.innerHTML = `
       <div class="modal-head"><div><h2>Новое событие</h2></div><button class="close-btn" id="closeModal4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
-        <div class="field"><label>Название *</label><input class="in" id="e_title"></div>
-        <div class="field"><label>Дата *</label><input class="in" type="date" id="e_date" value="${prefillDate || new Date().toISOString().slice(0,10)}"></div>
+        <div class="field"><label>Название *</label><input class="in" id="e_title" placeholder="Название события"></div>
+        <div class="field-row">
+          <div class="field"><label>Дата *</label><input class="in" type="date" id="e_date" value="${prefillDate || new Date().toISOString().slice(0,10)}"></div>
+          <div class="field"><label>Начало</label><input class="in" type="time" id="e_start" value="09:00"></div>
+          <div class="field"><label>Окончание</label><input class="in" type="time" id="e_end" value="10:00"></div>
+        </div>
+        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="e_allday"> Весь день (без времени)</label>
         <button class="btn primary" id="saveEvent" style="align-self:flex-start;">Добавить в календарь</button>
       </div>`;
     document.getElementById('closeModal4').addEventListener('click', closeModal);
+    document.getElementById('e_allday').addEventListener('change', (e)=>{
+      document.getElementById('e_start').disabled = e.target.checked;
+      document.getElementById('e_end').disabled = e.target.checked;
+    });
     document.getElementById('saveEvent').addEventListener('click', async ()=>{
       const title = document.getElementById('e_title').value.trim();
       const date = document.getElementById('e_date').value;
       if(!title || !date) return;
-      events.push({id:uid(), title, date, createdBy:me});
+      const allDay = document.getElementById('e_allday').checked;
+      const startTime = allDay ? '' : document.getElementById('e_start').value;
+      const endTime = allDay ? '' : document.getElementById('e_end').value;
+      events.push({id:uid(), title, date, startTime, endTime, createdBy:me});
       await setShared(K_EVENTS, events);
-      await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}`);
+      await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}${startTime?' в '+startTime:''}`);
       closeModal(); renderAll(); showToast('Событие добавлено');
     });
     document.getElementById('overlay').classList.add('show');
@@ -1625,38 +1671,47 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   // Каждая метрика нормируется 0-100 относительно остальных менеджеров,
   // итоговый рейтинг — среднее по тем метрикам, где есть данные (чтобы
   // отсутствие отзывов не топило человека незаслуженно).
+  // Обе метрики скорости — не по календарным дням, а по РАБОЧЕМУ ВРЕМЕНИ
+  // менеджера (сумма его смен между двумя моментами) — так «висело у клиента
+  // 3 дня, пока он был в отпуске» не портит статистику несправедливо.
   function computeManagerMetrics(){
     const roleNames = Object.keys(roles).filter(n=> roles[n]==='manager' || roles[n]==='curator');
     const names = [...new Set([...managers.map(m=>m.name), ...roleNames, ...clients.map(c=>c.manager).filter(Boolean)])];
     const raw = {};
     names.forEach(n=>{
       const mine = clients.filter(c=>c.manager===n);
-      let timeSamples = [];
+      let searchSamples = [], closeSamples = [];
       mine.forEach(c=>{
+        const start = c.searchingStartedAt;
+        if(!start) return;
         if(c.candidateTimestamps && c.candidateTimestamps.length){
-          const start = c.createdAt || parseClientDate(c) || c.candidateTimestamps[0];
-          const last = c.candidateTimestamps[c.candidateTimestamps.length-1];
-          const perMan = (last - start) / c.candidateTimestamps.length;
-          if(perMan >= 0) timeSamples.push(perMan);
+          const lastCandidate = c.candidateTimestamps[c.candidateTimestamps.length-1];
+          if(lastCandidate > start) searchSamples.push(computeShiftMs(n, start, lastCandidate));
+        }
+        if(c.stage==='closed_won' && c.closedAt && c.closedAt > start){
+          // "Закрыто анкет" — сколько реально времени прошло от взятия в работу до
+          // закрытия, ВКЛЮЧАЯ нерабочее время (обычная календарная разница, без фильтра по сменам)
+          closeSamples.push(c.closedAt - start);
         }
       });
-      const avgTime = timeSamples.length ? timeSamples.reduce((a,b)=>a+b,0)/timeSamples.length : null;
-      const closed = mine.filter(c=>c.stage==='closed_won').length;
+      const avgSearchMs = searchSamples.length ? searchSamples.reduce((a,b)=>a+b,0)/searchSamples.length : null;
+      const avgCloseMs = closeSamples.length ? closeSamples.reduce((a,b)=>a+b,0)/closeSamples.length : null;
+      const closedCount = mine.filter(c=>c.stage==='closed_won').length;
       const myReviews = reviews.filter(r=>r.manager===n);
       const avgStars = myReviews.length ? myReviews.reduce((a,r)=>a+r.stars,0)/myReviews.length : null;
-      raw[n] = {avgTime, closed, avgStars, reviewCount: myReviews.length};
+      raw[n] = {avgSearchMs, avgCloseMs, closedCount, avgStars, reviewCount: myReviews.length};
     });
-    const timeVals = Object.values(raw).map(r=>r.avgTime).filter(v=>v!=null);
-    const closedVals = Object.values(raw).map(r=>r.closed);
+    const searchVals = Object.values(raw).map(r=>r.avgSearchMs).filter(v=>v!=null);
+    const closeVals = Object.values(raw).map(r=>r.avgCloseMs).filter(v=>v!=null);
     const starVals = Object.values(raw).map(r=>r.avgStars).filter(v=>v!=null);
-    const minT = timeVals.length?Math.min(...timeVals):0, maxT = timeVals.length?Math.max(...timeVals):1;
-    const minC = Math.min(...closedVals,0), maxC = Math.max(...closedVals,1);
+    const minSe = searchVals.length?Math.min(...searchVals):0, maxSe = searchVals.length?Math.max(...searchVals):1;
+    const minCl = closeVals.length?Math.min(...closeVals):0, maxCl = closeVals.length?Math.max(...closeVals):1;
     const minS = starVals.length?Math.min(...starVals):1, maxS = starVals.length?Math.max(...starVals):5;
     const result = {};
     names.forEach(n=>{
       const r = raw[n]; const parts = [];
-      if(r.avgTime!=null) parts.push(maxT>minT ? (maxT-r.avgTime)/(maxT-minT)*100 : 100);
-      parts.push(maxC>minC ? (r.closed-minC)/(maxC-minC)*100 : (r.closed>0?100:0));
+      if(r.avgSearchMs!=null) parts.push(maxSe>minSe ? (maxSe-r.avgSearchMs)/(maxSe-minSe)*100 : 100);
+      if(r.avgCloseMs!=null) parts.push(maxCl>minCl ? (maxCl-r.avgCloseMs)/(maxCl-minCl)*100 : 100);
       if(r.avgStars!=null) parts.push(maxS>minS ? (r.avgStars-minS)/(maxS-minS)*100 : (r.avgStars/5*100));
       result[n] = {...r, score: parts.length ? Math.round(parts.reduce((a,b)=>a+b,0)/parts.length) : null};
     });
@@ -1696,8 +1751,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <div class="st"><div class="n">${m.earnedTotal.toLocaleString('ru-RU')} ₽</div><div class="l">Заработано всего</div></div>
         </div>
         <div class="mgr-stats" style="margin-top:8px;">
-          <div class="st"><div class="n">${fmtDuration(met.avgTime)}</div><div class="l">Среднее время на 1 мужчину</div></div>
-          <div class="st"><div class="n">${met.closed||0}</div><div class="l">Анкет закрыто успешно</div></div>
+          <div class="st"><div class="n">${fmtDuration(met.avgSearchMs)}</div><div class="l">Скорость поиска (раб. время)</div></div>
+          <div class="st"><div class="n">${fmtDuration(met.avgCloseMs)}</div><div class="l">До закрытия (календарное время)</div></div>
+          <div class="st"><div class="n">${met.closedCount||0}</div><div class="l">Анкет закрыто успешно (справочно)</div></div>
           <div class="st" style="grid-column:1/-1;"><div class="n">${met.avgStars!=null?met.avgStars.toFixed(1)+' ★':'нет отзывов'}</div><div class="l">Средний отзыв (${met.reviewCount||0} шт.)</div></div>
         </div>
       </div>`;
