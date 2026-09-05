@@ -1315,6 +1315,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function openClient(id){
     const c = clients.find(x=> String(x.id)===String(id));
     if(!c) return;
+    // Пока карточка открыта, фоновый опрос раз в 4 сек может подменить весь
+    // массив clients свежими данными с сервера — тогда c выше "отвяжется" от
+    // реального объекта, и любые правки через него улетят в никуда. Поэтому
+    // каждый обработчик ниже перед мутацией заново находит живой объект по id.
+    function liveC(){ return clients.find(x=>String(x.id)===String(id)) || c; }
     if(myRole==='manager' && c.manager!==me){ showToast('Эта анкета не в твоей работе'); return; }
     const modal = document.getElementById('modalBox');
     const stages = currentView()==='deals' && currentBoard==='problem' ? STAGES_PROBLEM : STAGES_WORK;
@@ -1373,8 +1378,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     }
     if(document.getElementById('reviewBtn')){
       document.getElementById('reviewBtn').addEventListener('click', ()=>{
+        const cc = liveC();
         const rf = document.getElementById('reviewForm');
-        rf.innerHTML = `<div class="block"><h4>Отзыв о работе менеджера ${esc(c.manager)} по этой анкете</h4>
+        rf.innerHTML = `<div class="block"><h4>Отзыв о работе менеджера ${esc(cc.manager)} по этой анкете</h4>
           <div class="status-row" id="starPicker">${[1,2,3,4,5].map(n=>`<button class="status-btn" data-star="${n}">${'★'.repeat(n)}</button>`).join('')}</div>
           <textarea class="note" id="reviewText" placeholder="Комментарий (необязательно)" style="margin-top:8px;"></textarea>
           <button class="btn primary sm" id="submitReview" style="margin-top:8px;" disabled>Выбери оценку</button></div>`;
@@ -1387,9 +1393,10 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         }));
         document.getElementById('submitReview').addEventListener('click', async ()=>{
           if(!picked) return;
-          reviews.push({id:uid(), manager:c.manager, clientId:c.id, clientName:c.name, stars:picked, comment: document.getElementById('reviewText').value.trim(), from:me, ts:Date.now()});
+          const cc2 = liveC();
+          reviews.push({id:uid(), manager:cc2.manager, clientId:cc2.id, clientName:cc2.name, stars:picked, comment: document.getElementById('reviewText').value.trim(), from:me, ts:Date.now()});
           await setShared(K_REVIEWS, reviews);
-          await logActivity('note', `оставил(а) отзыв ${picked}★ менеджеру <b>${esc(c.manager)}</b> по анкете ${esc(c.name)}`, c.id);
+          await logActivity('note', `оставил(а) отзыв ${picked}★ менеджеру <b>${esc(cc2.manager)}</b> по анкете ${esc(cc2.name)}`, cc2.id);
           rf.innerHTML = '';
           renderAll();
           showToast('Отзыв сохранён');
@@ -1398,51 +1405,56 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     }
     if(myRole==='admin'){
       document.getElementById('deleteClientBtn').addEventListener('click', async ()=>{
-        if(!confirm(`Удалить анкету «${c.name}» навсегда? Это нельзя отменить.`)) return;
-        clients = clients.filter(x=>x.id!==c.id);
+        const cc = liveC();
+        if(!confirm(`Удалить анкету «${cc.name}» навсегда? Это нельзя отменить.`)) return;
+        clients = clients.filter(x=>x.id!==cc.id);
         await setShared(K_CLIENTS, clients);
-        await logActivity('note', `удалил(а) анкету <b>${esc(c.name)}</b>`);
+        await logActivity('note', `удалил(а) анкету <b>${esc(cc.name)}</b>`);
         closeModal(); renderAll(); showToast('Анкета удалена');
       });
     }
     document.getElementById('addManBtn').addEventListener('click', async ()=>{
       const val = document.getElementById('manName').value.trim();
       if(!val) return;
-      c.candidates = c.candidates || [];
-      c.candidateTimestamps = c.candidateTimestamps || [];
-      const wasBelow3 = c.candidates.length < 3;
-      c.candidates.push(val);
-      c.candidateTimestamps.push(Date.now());
+      const cc = liveC();
+      cc.candidates = cc.candidates || [];
+      cc.candidateTimestamps = cc.candidateTimestamps || [];
+      const wasBelow3 = cc.candidates.length < 3;
+      cc.candidates.push(val);
+      cc.candidateTimestamps.push(Date.now());
       await setShared(K_CLIENTS, clients);
-      await logActivity('note', `добавил(а) мужчину «${esc(val)}» к анкете <b>${esc(c.name)}</b> (${c.candidates.length}/3)`, c.id);
-      if(wasBelow3 && c.candidates.length>=3 && !c.candidatesBonusScheduled && c.stage!=='closed_won' && c.stage!=='problem' && c.stage!=='refund'){
-        c.candidatesBonusScheduled = true;
-        await changeClientStage(c, 'all_found');
-        await scheduleLedgerEntry({person:c.manager||me, amount:2500, currency:'RUB', reason:`3/3 мужчин найдено — анкета «${c.name}»`, clientId:c.id, createdBy:me}, Date.now()+3*24*60*60*1000);
+      await logActivity('note', `добавил(а) мужчину «${esc(val)}» к анкете <b>${esc(cc.name)}</b> (${cc.candidates.length}/3)`, cc.id);
+      if(wasBelow3 && cc.candidates.length>=3 && !cc.candidatesBonusScheduled && cc.stage!=='closed_won' && cc.stage!=='problem' && cc.stage!=='refund'){
+        cc.candidatesBonusScheduled = true;
+        await changeClientStage(cc, 'all_found');
+        await scheduleLedgerEntry({person:cc.manager||me, amount:2500, currency:'RUB', reason:`3/3 мужчин найдено — анкета «${cc.name}»`, clientId:cc.id, createdBy:me}, Date.now()+3*24*60*60*1000);
         showToast('3/3 — анкета переведена, бонус менеджеру придёт через 3 дня');
       }
       renderAll(); openClient(id);
     });
     modal.querySelectorAll('.candidates [data-rm]').forEach(x=> x.addEventListener('click', async ()=>{
-      c.candidates.splice(Number(x.dataset.rm),1);
-      if(c.candidateTimestamps) c.candidateTimestamps.splice(Number(x.dataset.rm),1);
+      const cc = liveC();
+      cc.candidates.splice(Number(x.dataset.rm),1);
+      if(cc.candidateTimestamps) cc.candidateTimestamps.splice(Number(x.dataset.rm),1);
       await setShared(K_CLIENTS, clients);
-      await logActivity('note', `удалил(а) мужчину из анкеты <b>${esc(c.name)}</b>`, c.id);
+      await logActivity('note', `удалил(а) мужчину из анкеты <b>${esc(cc.name)}</b>`, cc.id);
       renderAll(); openClient(id);
     }));
     document.getElementById('starToggle').addEventListener('click', async ()=>{
-      c.priority = !c.priority; await setShared(K_CLIENTS, clients);
-      await logActivity('note', `${c.priority?'отметил(а) приоритетной':'снял(а) приоритет с'} анкеты <b>${esc(c.name)}</b>`, c.id);
+      const cc = liveC();
+      cc.priority = !cc.priority; await setShared(K_CLIENTS, clients);
+      await logActivity('note', `${cc.priority?'отметил(а) приоритетной':'снял(а) приоритет с'} анкеты <b>${esc(cc.name)}</b>`, cc.id);
       renderAll(); openClient(id);
     });
     modal.querySelectorAll('.status-btn').forEach(b=> b.addEventListener('click', async ()=>{
-      await changeClientStage(c, b.dataset.s);
+      const cc = liveC();
+      await changeClientStage(cc, b.dataset.s);
       renderAll(); openClient(id);
     }));
     document.getElementById('translateBtn').addEventListener('click', ()=>{
       const box = document.getElementById('translateBox');
       box.className = 'translate-box';
-      translateClient(c, box);
+      translateClient(liveC(), box);
     });
     document.getElementById('problemBtn').addEventListener('click', ()=>{
       const pf = document.getElementById('problemForm');
@@ -1452,9 +1464,10 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       document.getElementById('submitProblem').addEventListener('click', async ()=>{
         const txt = document.getElementById('problemText').value.trim();
         if(!txt) return;
-        c.problemNote = txt; c.stage = 'problem';
+        const cc = liveC();
+        cc.problemNote = txt; cc.stage = 'problem';
         await setShared(K_CLIENTS, clients);
-        await logActivity('problem', `сообщил(а) о проблеме по анкете <b>${esc(c.name)}</b>: ${esc(txt)}`, c.id);
+        await logActivity('problem', `сообщил(а) о проблеме по анкете <b>${esc(cc.name)}</b>: ${esc(txt)}`, cc.id);
         closeModal(); renderAll();
         showToast('Проблема передана регерам');
       });
@@ -1464,8 +1477,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     noteArea.addEventListener('input', ()=>{
       clearTimeout(noteTimer);
       noteTimer = setTimeout(async ()=>{
-        c.note = noteArea.value; await setShared(K_CLIENTS, clients);
-        await logActivity('note', `добавил(а) заметку по <b>${esc(c.name)}</b>`, c.id);
+        const cc = liveC();
+        cc.note = noteArea.value; await setShared(K_CLIENTS, clients);
+        await logActivity('note', `добавил(а) заметку по <b>${esc(cc.name)}</b>`, cc.id);
       }, 600);
     });
     if(c.login){
