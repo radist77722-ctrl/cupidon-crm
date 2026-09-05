@@ -173,18 +173,30 @@ select{cursor:pointer;}
 .task-title.done{text-decoration:line-through; color:var(--muted);}
 .task-sub{font-size:11.2px; color:var(--muted); margin-top:2px; display:flex; gap:10px; flex-wrap:wrap;}
 
-.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
-.cal-dow{font-size:10.8px; color:var(--muted); text-align:center; padding-bottom:4px; font-weight:600;}
-.cal-cell{background:var(--paper-card); border:1px solid var(--line); border-radius:9px; min-height:84px; padding:6px; font-size:10.8px; cursor:pointer; transition:border-color .15s;}
-.cal-cell:not(.other):hover{border-color:var(--gold);}
-.cal-cell.other{opacity:.35;}
-.cal-cell.today{border-color:var(--wine); border-width:2px;}
-.cal-daynum{font-weight:700; font-size:12px; margin-bottom:4px;}
-.cal-evt{background:var(--gold); color:#fff; border-radius:5px; padding:2px 5px; font-size:9.8px; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.cal-evt.task{background:var(--blue);}
+.cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--line);}
+.cal-grid.cal-dow-row{border:none; background:transparent; gap:0; margin-bottom:2px;}
+.cal-dow{font-size:11.5px; color:var(--muted); text-align:center; padding-bottom:8px; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
+.cal-cell{background:var(--paper-card); min-height:118px; padding:10px 8px; font-size:11.5px; cursor:pointer; transition:background .15s; position:relative;}
+.cal-cell:not(.other):hover{background:var(--paper);}
+.cal-cell.other{background:var(--paper); opacity:.4;}
+.cal-daynum{font-weight:600; font-size:13px; margin-bottom:8px; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%;}
+.cal-cell.today .cal-daynum{background:var(--wine); color:#fff; font-weight:700;}
+.cal-evt{background:var(--sage-bg); color:var(--sage); border-left:3px solid var(--sage); border-radius:4px; padding:3px 6px; font-size:10.5px; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600;}
+.cal-evt.task{background:var(--blue-bg); color:var(--blue); border-left-color:var(--blue);}
 .cal-nav{display:flex; align-items:center; gap:10px;}
-.cal-nav button{all:unset; cursor:pointer; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:9px;}
+.cal-nav button{all:unset; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:9px;}
 .cal-nav button:hover{background:var(--paper);}
+.cal-today-btn{all:unset; cursor:pointer; padding:0 12px; height:32px; display:flex; align-items:center; border:1px solid var(--line); border-radius:9px; font-size:12.5px; font-weight:600;}
+.cal-today-btn:hover{background:var(--paper);}
+
+/* компактный попап быстрого добавления события — как в Битриксе */
+.quick-evt-popup .modal-body{padding:0;}
+.quick-evt-title{width:100%; border:none; outline:none; font-family:'Fraunces',serif; font-size:20px; font-weight:600; padding:20px 24px 12px; background:transparent;}
+.quick-evt-title::placeholder{color:var(--muted); font-weight:500;}
+.quick-evt-row{display:flex; align-items:center; gap:8px; padding:0 24px 16px; flex-wrap:wrap;}
+.quick-evt-row input[type="date"], .quick-evt-row input[type="time"]{border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-size:12.8px; font-family:'Inter',sans-serif; background:var(--paper);}
+.quick-evt-dash{color:var(--muted); font-size:13px;}
+.quick-evt-actions{display:flex; gap:10px; padding:16px 24px 22px; border-top:1px solid var(--line);}
 
 .feed-item{display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line);}
 .feed-item:last-child{border-bottom:none;}
@@ -459,12 +471,12 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-deals" style="display:none;">
       <div class="topbar">
-        <div><h1>Сделки</h1><p id="dealsSub">Анкеты, где ещё нет ни одного мужчины — обычный путь по этапам</p></div>
+        <div><h1>Сделки</h1><p id="dealsSub">Новые лиды — от первой заявки до готовности к подбору</p></div>
         <button class="btn primary" id="addDealBtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>Новая сделка</button>
       </div>
       <div class="board-tabs">
-        <button class="on" data-board="nomen">Без мужчин</button>
-        <button data-board="men">Ход поиска (1-2-3)</button>
+        <button class="on" data-board="nomen">Лиды</button>
+        <button data-board="men">В процессе подбора</button>
         <button data-board="problem">Проблемные аккаунты</button>
       </div>
       <div class="controls" id="boardMgrFilterWrap" style="display:none;">
@@ -513,15 +525,16 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <div><h1>Календарь</h1><p>Клик по дню — быстро добавить событие. Дедлайны задач подтягиваются сами.</p></div>
         <div class="cal-nav">
           <button id="calPrev">&larr;</button>
-          <div class="serif" id="calLabel" style="min-width:150px; text-align:center; font-size:15px;"></div>
+          <button class="cal-today-btn" id="calToday">Сегодня</button>
           <button id="calNext">&rarr;</button>
+          <div class="serif" id="calLabel" style="min-width:150px; text-align:center; font-size:17px; margin-left:6px;"></div>
           <button class="btn primary sm" id="addEventBtn" style="margin-left:8px;">+ событие</button>
         </div>
       </div>
       <div style="display:flex; gap:16px; align-items:flex-start;">
         <div style="flex:1; min-width:0;">
-          <div class="cal-grid" id="calDow"></div>
-          <div class="cal-grid" id="calGrid" style="margin-top:6px;"></div>
+          <div class="cal-grid cal-dow-row" id="calDow"></div>
+          <div class="cal-grid" id="calGrid"></div>
         </div>
         <div class="card" style="width:250px; flex-shrink:0;">
           <h3 class="section-title">Ближайшее</h3>
@@ -678,10 +691,10 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   const COLS_NOMEN = [
     {id:'new', label:'Новая заявка (не зарегистрирована)', test:c=>c.stage==='new', dropStage:'new'},
     {id:'ready', label:'Анкета готова к работе', test:c=>c.stage==='ready', dropStage:'ready'},
-    {id:'searching', label:'В подборе', test:c=>c.stage==='searching' && (c.candidates||[]).length===0, dropStage:'searching'},
     {id:'closed_won', label:'Закрыта успешно', test:c=>c.stage==='closed_won', dropStage:'closed_won'},
   ];
   const COLS_MEN = [
+    {id:'searching', label:'В подборе', test:c=>c.stage==='searching' && (c.candidates||[]).length===0, dropStage:'searching'},
     {id:'men1', label:'1 мужчина', test:c=>c.stage==='searching' && (c.candidates||[]).length===1, dropStage:null},
     {id:'men2', label:'2 мужчины', test:c=>c.stage==='searching' && (c.candidates||[]).length===2, dropStage:null},
     {id:'all_found', label:'Все мужчины найдены (3 из 3)', test:c=>c.stage==='all_found', dropStage:'all_found'},
@@ -1069,8 +1082,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     document.querySelectorAll('.board-tabs button').forEach(x=>x.classList.remove('on'));
     b.classList.add('on'); currentBoard = b.dataset.board;
     const subs = {
-      nomen: 'Анкеты, где ещё нет ни одного мужчины — обычный путь по этапам',
-      men: 'Анкеты в активном поиске — колонки по числу найденных мужчин (кликом, не перетаскиванием)',
+      nomen: 'Новые лиды — от первой заявки до готовности к подбору',
+      men: 'Ход подбора мужчин — колонки по числу найденных (кликом в карточке, не перетаскиванием)',
       problem: 'Проблемные анкеты и возвраты — зона ответственности регеров',
     };
     document.getElementById('dealsSub').textContent = subs[currentBoard] || '';
@@ -1147,7 +1160,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="col-head"><span class="t">${col.label}</span><span class="c">${items.length}</span></div>
         <div class="col-body" ${dropAttr}>
           ${items.map(c=>`<div class="dcard" draggable="true" data-id="${c.id}">
-            <div class="nm">${c.priority?'⭐ ':''}${esc(c.name)}${c.age?', '+esc(c.age):''}</div>
+            <div class="nm">${c.priority?'⭐ ':''}<span class="mono" style="font-size:10.5px; color:var(--muted); font-weight:600;">№${esc(c.num||'—')}</span> ${esc(c.name)}${c.age?', '+esc(c.age):''}</div>
             <div style="font-size:11px; color:var(--muted);">${esc(c.city)||'—'}</div>
             <div class="meta"><span>${esc(c.manager)||'без менеджера'}</span><div class="avatar sm">${initials(c.manager)}</div></div>
           </div>`).join('')}
@@ -1230,7 +1243,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="top">
           <div style="display:flex; gap:10px; align-items:center;">
             <div class="avatar">${initials(c.name)}</div>
-            <div><div class="nm">${c.priority?'⭐ ':''}${esc(c.name)}${c.age?', '+esc(c.age):''}</div><div class="meta"><span>${esc(c.city)||'город не указан'}</span></div></div>
+            <div><div class="nm">${c.priority?'⭐ ':''}<span class="mono" style="font-size:10.5px; color:var(--muted); font-weight:600;">№${esc(c.num||'—')}</span> ${esc(c.name)}${c.age?', '+esc(c.age):''}</div><div class="meta"><span>${esc(c.city)||'город не указан'}</span></div></div>
           </div>
           ${pill(c.stage, STAGE_MAP)}
         </div>
@@ -1506,7 +1519,10 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     });
     document.getElementById('overlay').classList.add('show');
   }
-  function closeModal(){ document.getElementById('overlay').classList.remove('show'); }
+  function closeModal(){
+    document.getElementById('overlay').classList.remove('show');
+    document.getElementById('modalBox').className = 'modal'; // сбрасываем спец-классы вроде quick-evt-popup
+  }
   document.getElementById('overlay').addEventListener('click', (e)=>{ if(e.target.id==='overlay') closeModal(); });
 
   // ================= TASKS =================
@@ -1605,21 +1621,28 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   }
   document.getElementById('calPrev').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()-1); renderCalendar(); });
   document.getElementById('calNext').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()+1); renderCalendar(); });
+  document.getElementById('calToday').addEventListener('click', ()=>{ calDate = new Date(); renderCalendar(); });
   function openEventForm(prefillDate){
     const modal = document.getElementById('modalBox');
+    modal.className = 'modal quick-evt-popup';
     modal.innerHTML = `
-      <div class="modal-head"><div><h2>Новое событие</h2></div><button class="close-btn" id="closeModal4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-head" style="padding-bottom:0; border-bottom:none;"><div></div><button class="close-btn" id="closeModal4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
-        <div class="field"><label>Название *</label><input class="in" id="e_title" placeholder="Название события"></div>
-        <div class="field-row">
-          <div class="field"><label>Дата *</label><input class="in" type="date" id="e_date" value="${prefillDate || new Date().toISOString().slice(0,10)}"></div>
-          <div class="field"><label>Начало</label><input class="in" type="time" id="e_start" value="09:00"></div>
-          <div class="field"><label>Окончание</label><input class="in" type="time" id="e_end" value="10:00"></div>
+        <input class="quick-evt-title" id="e_title" placeholder="Название события" autofocus>
+        <div class="quick-evt-row">
+          <input type="date" id="e_date" value="${prefillDate || new Date().toISOString().slice(0,10)}">
+          <input type="time" id="e_start" value="09:00">
+          <span class="quick-evt-dash">—</span>
+          <input type="time" id="e_end" value="10:00">
+          <label style="display:flex; align-items:center; gap:6px; font-size:12.3px; color:var(--muted); cursor:pointer; margin-left:4px;"><input type="checkbox" id="e_allday"> весь день</label>
         </div>
-        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="e_allday"> Весь день (без времени)</label>
-        <button class="btn primary" id="saveEvent" style="align-self:flex-start;">Добавить в календарь</button>
+        <div class="quick-evt-actions">
+          <button class="btn primary" id="saveEvent">Создать</button>
+          <button class="btn ghost" id="cancelEvent">Отменить</button>
+        </div>
       </div>`;
     document.getElementById('closeModal4').addEventListener('click', closeModal);
+    document.getElementById('cancelEvent').addEventListener('click', closeModal);
     document.getElementById('e_allday').addEventListener('change', (e)=>{
       document.getElementById('e_start').disabled = e.target.checked;
       document.getElementById('e_end').disabled = e.target.checked;
