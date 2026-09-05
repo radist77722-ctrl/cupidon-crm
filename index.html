@@ -143,7 +143,7 @@ select{cursor:pointer;}
 .board-tabs{display:flex; gap:8px; margin-bottom:16px;}
 .board-tabs button{all:unset; cursor:pointer; padding:9px 16px; border-radius:10px; font-size:13px; font-weight:600; border:1px solid var(--line); color:var(--ink-soft);}
 .board-tabs button.on{background:var(--wine); border-color:var(--wine); color:#fff;}
-.board{display:flex; gap:14px; overflow-x:auto; padding-bottom:12px;}
+.board{display:flex; gap:14px; overflow-x:auto; padding-bottom:12px; align-items:flex-start;}
 .col{background:#efe9dd; border-radius:14px; padding:12px; min-width:240px; max-width:260px; min-height:180px; flex-shrink:0; display:flex; flex-direction:column; border-top:4px solid var(--line);}
 .col.stage-new{border-top-color:var(--blue);}
 .col.stage-ready{border-top-color:var(--gold);}
@@ -335,6 +335,21 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 .rate-submit{all:unset; cursor:pointer; display:block; width:100%; text-align:center; padding:13px; border-radius:12px; background:var(--wine); color:#fff; font-weight:700; font-size:14px;}
 .rate-submit:disabled{opacity:.4; cursor:default;}
 .rate-thanks .icon{font-size:44px; margin-bottom:12px;}
+
+/* свой попап выбора даты вместо нативного input[type=date] */
+.date-fake{border:1px solid var(--line); background:var(--paper-card); border-radius:9px; padding:6px 10px; font-size:12.3px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; color:var(--ink); font-family:'Inter',sans-serif; white-space:nowrap;}
+.date-fake:hover{border-color:var(--gold);}
+.date-picker-pop{position:fixed; z-index:300; background:var(--paper-card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:14px; width:266px;}
+.date-picker-pop .dp-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; font-weight:700; font-family:'Fraunces',serif; font-size:14.5px; text-transform:capitalize;}
+.date-picker-pop .dp-nav{all:unset; cursor:pointer; width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:7px;}
+.date-picker-pop .dp-nav:hover{background:var(--paper);}
+.date-picker-pop .dp-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:2px; text-align:center;}
+.date-picker-pop .dp-dow{font-size:10px; color:var(--muted); font-weight:700; padding-bottom:4px;}
+.date-picker-pop .dp-day{all:unset; cursor:pointer; padding:6px 0; border-radius:7px; font-size:12.3px; text-align:center;}
+.date-picker-pop .dp-day:hover{background:var(--paper);}
+.date-picker-pop .dp-day.other{color:var(--muted); opacity:.35; cursor:default;}
+.date-picker-pop .dp-day.selected{background:var(--wine); color:#fff; font-weight:700;}
+.date-picker-pop .dp-actions{display:flex; gap:8px; margin-top:10px;}
 
 </style>
 </head>
@@ -1798,7 +1813,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <div class="st"><div class="n">${fmtDuration(met.avgSearchMs)}</div><div class="l">Скорость поиска (раб. время)</div></div>
           <div class="st"><div class="n">${fmtDuration(met.avgCloseMs)}</div><div class="l">До закрытия (календарное время)</div></div>
           <div class="st"><div class="n">${met.closedCount||0}</div><div class="l">Анкет закрыто успешно (справочно)</div></div>
-          <div class="st" style="grid-column:1/-1;"><div class="n">${met.avgStars!=null?met.avgStars.toFixed(1)+' ★':'нет отзывов'}</div><div class="l">Средний отзыв (${met.reviewCount||0} шт.)</div></div>
+          <div class="st" style="grid-column:1/-1;"><div class="n">${met.avgStars!=null?met.avgStars.toFixed(1)+' ★':'—'}</div><div class="l">${met.reviewCount ? `Средний отзыв (отзывов: ${met.reviewCount})` : 'Отзывов пока нет'}</div></div>
         </div>
       </div>`;
     }).join('');
@@ -2369,6 +2384,63 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   }else{
     initIdentity();
   }
+  // ================= СВОЙ КАЛЕНДАРЬ ДЛЯ ПОЛЕЙ "ИЛИ ПЕРИОД" =================
+  // Заменяем нативный input[type=date] (тот самый системный виджет ОС,
+  // который никак не перекрасить) на свою кнопку + свой попап-календарь.
+  function attachDatePicker(inputId){
+    const input = document.getElementById(inputId);
+    if(!input || input.dataset.dpAttached) return;
+    input.dataset.dpAttached = '1';
+    input.style.display = 'none';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'date-fake';
+    input.parentNode.insertBefore(btn, input.nextSibling);
+    let viewDate = new Date();
+    function refreshLabel(){
+      btn.textContent = input.value ? new Date(input.value+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short',year:'numeric'}) : 'выбрать дату';
+    }
+    refreshLabel();
+    function closePop(){ const p=document.getElementById('dp-pop-'+inputId); if(p) p.remove(); document.removeEventListener('click', onDocClick, true); }
+    function onDocClick(e){ if(!e.target.closest('.date-picker-pop') && e.target!==btn) closePop(); }
+    function renderPop(){
+      let pop = document.getElementById('dp-pop-'+inputId);
+      if(!pop){
+        pop = document.createElement('div');
+        pop.id = 'dp-pop-'+inputId; pop.className = 'date-picker-pop';
+        document.body.appendChild(pop);
+        const r = btn.getBoundingClientRect();
+        pop.style.top = (r.bottom+6)+'px'; pop.style.left = Math.min(r.left, window.innerWidth-282)+'px';
+      }
+      const y=viewDate.getFullYear(), m=viewDate.getMonth();
+      const first = new Date(y,m,1);
+      const off = (first.getDay()+6)%7;
+      const dim = new Date(y,m+1,0).getDate();
+      const dip = new Date(y,m,0).getDate();
+      const cells = [];
+      for(let i=off;i>0;i--) cells.push({d:dip-i+1, other:true});
+      for(let d=1; d<=dim; d++) cells.push({d, other:false, iso:`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`});
+      let nextD=1; while(cells.length%7!==0) cells.push({d:nextD++, other:true});
+      const dowNames=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+      pop.innerHTML = `
+        <div class="dp-head"><button class="dp-nav" id="dpPrev-${inputId}">←</button><span>${viewDate.toLocaleDateString('ru-RU',{month:'long', year:'numeric'})}</span><button class="dp-nav" id="dpNext-${inputId}">→</button></div>
+        <div class="dp-grid">${dowNames.map(d=>`<div class="dp-dow">${d}</div>`).join('')}${cells.map(c=>`<button class="dp-day ${c.other?'other':''} ${c.iso===input.value?'selected':''}" ${c.other?'disabled':`data-iso="${c.iso}"`}>${c.d}</button>`).join('')}</div>
+        <div class="dp-actions"><button class="btn ghost sm" id="dpClear-${inputId}" type="button">Очистить</button><button class="btn ghost sm" id="dpClose-${inputId}" type="button">Закрыть</button></div>`;
+      pop.querySelector('#dpPrev-'+inputId).onclick = ()=>{ viewDate=new Date(y,m-1,1); renderPop(); };
+      pop.querySelector('#dpNext-'+inputId).onclick = ()=>{ viewDate=new Date(y,m+1,1); renderPop(); };
+      pop.querySelector('#dpClear-'+inputId).onclick = ()=>{ input.value=''; input.dispatchEvent(new Event('change')); refreshLabel(); closePop(); };
+      pop.querySelector('#dpClose-'+inputId).onclick = closePop;
+      pop.querySelectorAll('[data-iso]').forEach(b=> b.onclick = ()=>{ input.value=b.dataset.iso; input.dispatchEvent(new Event('change')); refreshLabel(); closePop(); });
+    }
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      if(document.getElementById('dp-pop-'+inputId)){ closePop(); return; }
+      viewDate = input.value ? new Date(input.value+'T00:00:00') : new Date();
+      renderPop();
+      setTimeout(()=> document.addEventListener('click', onDocClick, true), 0);
+    });
+  }
+  ['periodFrom','periodTo','balFrom','balTo','shiftFrom','shiftTo'].forEach(attachDatePicker);
 })();
 
 </script>
