@@ -1605,7 +1605,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const cells = [];
     for(let i=startOffset;i>0;i--) cells.push({d:daysInPrev-i+1, other:true, date:null});
     for(let d=1; d<=daysInMonth; d++){ const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; cells.push({d, other:false, date:dateStr}); }
-    while(cells.length%7!==0) cells.push({d:cells.length, other:true, date:null});
+    let nextMonthDay = 1;
+    while(cells.length%7!==0) cells.push({d:nextMonthDay++, other:true, date:null});
     const todayStr = new Date().toISOString().slice(0,10);
     document.getElementById('calGrid').innerHTML = cells.map(cell=>{
       if(cell.other) return `<div class="cal-cell other"><div class="cal-daynum">${cell.d}</div></div>`;
