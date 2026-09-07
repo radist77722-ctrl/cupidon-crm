@@ -181,7 +181,7 @@ select{cursor:pointer;}
 .cal-cell.other{background:var(--paper); opacity:.4;}
 .cal-daynum{font-weight:600; font-size:13px; margin-bottom:6px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:50%;}
 .cal-cell.today .cal-daynum{background:var(--wine); color:#fff; font-weight:700;}
-.cal-evt{background:var(--sage); color:#fff; border-radius:4px; padding:2px 6px; font-size:10.3px; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600;}
+.cal-evt{background:var(--sage); color:#fff; border-radius:4px; padding:2px 6px; font-size:10.3px; margin-bottom:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; cursor:grab;}
 .cal-evt.task{background:var(--blue);}
 .cal-nav{display:flex; align-items:center; gap:10px;}
 .cal-nav button{all:unset; cursor:pointer; width:32px; height:32px; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:6px;}
@@ -632,6 +632,16 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <div class="kpi-grid" id="adminKpi"></div>
         <div class="card"><h3 class="section-title">Назначение ролей и доступ</h3><div id="roleAssign"></div></div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Открытые проблемы</h3><div id="adminProblems"></div></div>
+        <div class="card" style="margin-top:16px;"><h3 class="section-title">Импорт анкет из Excel</h3>
+          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Загрузи файл с листами «Анкеты» и «Регистрация Тест» — новые анкеты (по номеру №, которого ещё нет в базе) добавятся, все существующие анкеты не тронутся ни на волос.</p>
+          <input type="file" id="importExcelInput" accept=".xlsx" style="display:none;">
+          <button class="btn primary sm" id="importExcelBtn">📥 Загрузить файл Excel</button>
+        </div>
+        <div class="card" style="margin-top:16px; border-color:var(--rust);">
+          <h3 class="section-title" style="color:var(--rust);">Опасная зона</h3>
+          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Удаляет вообще ВСЕ анкеты из базы без возможности отменить. Используй, если хочешь начать с чистого листа перед реальным импортом.</p>
+          <button class="btn danger sm" id="wipeAllBtn">🗑 Очистить всю базу анкет</button>
+        </div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Экспорт и бэкап</h3>
           <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Выгрузить всю базу анкет в Excel — для отчётов</p>
           <button class="btn primary sm" id="exportExcelBtn">Скачать отчёт .xlsx</button>
@@ -672,6 +682,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   const K_NOTIF_SEEN = 'notif-lastseen';
   const K_REVIEWS = 'shared-reviews';
   const K_SHIFTS = 'shared-shifts';
+  const K_PLANS = 'shared-plan-overrides';
 
   // Захардкоженные супер-аккаунты. ВАЖНО: это НЕ безопасно — любой человек с этой
   // ссылкой может открыть код страницы (вид -> исходный код / F12) и увидеть эти
@@ -725,6 +736,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   let messages = [];
   let reviews = [];
   let shifts = [];
+  let planOverrides = {};
   let shiftPeriodMode = 'month';
   let notifSeen = 0;
   let activeChannel = 'general';
@@ -822,6 +834,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     notifSeen = await getPersonal(K_NOTIF_SEEN, 0);
     reviews = await getShared(K_REVIEWS, []);
     shifts = await getShared(K_SHIFTS, []);
+    planOverrides = await getShared(K_PLANS, {});
   }
 
   // ---------- identity + roles ----------
@@ -1640,10 +1653,28 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       const dayEvents = events.filter(e=>e.date===cell.date);
       const dayTasks = tasks.filter(t=>t.dueDate===cell.date);
       const isToday = cell.date===todayStr;
-      return `<div class="cal-cell ${isToday?'today':''}" data-date="${cell.date}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" title="${esc(e.title)}">${e.startTime?esc(e.startTime)+' ':''}${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
+      return `<div class="cal-cell ${isToday?'today':''}" data-date="${cell.date}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" draggable="true" data-evt-id="${e.id}" title="${esc(e.title)}">${e.startTime?esc(e.startTime)+' ':''}${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
     }).join('');
     document.querySelectorAll('#calGrid .cal-cell:not(.other)').forEach(cell=>{
-      cell.addEventListener('click', ()=> openEventForm(cell.dataset.date));
+      cell.addEventListener('click', (e)=>{ if(e.target.closest('.cal-evt')) return; openEventForm(cell.dataset.date); });
+      cell.addEventListener('dragover', (e)=>{ e.preventDefault(); cell.style.background='var(--blue-bg)'; });
+      cell.addEventListener('dragleave', ()=>{ cell.style.background=''; });
+      cell.addEventListener('drop', async (e)=>{
+        e.preventDefault(); cell.style.background='';
+        const evtId = e.dataTransfer.getData('text/plain');
+        const ev = events.find(x=>String(x.id)===String(evtId));
+        if(ev && cell.dataset.date && ev.date!==cell.dataset.date){
+          const oldDate = ev.date;
+          ev.date = cell.dataset.date;
+          await setShared(K_EVENTS, events);
+          await logActivity('event', `перенёс(ла) событие «${esc(ev.title)}» с ${oldDate} на ${ev.date}`);
+          renderAll(); showToast('Событие перенесено');
+        }
+      });
+    });
+    document.querySelectorAll('#calGrid .cal-evt[draggable]').forEach(el=>{
+      el.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('text/plain', el.dataset.evtId); e.stopPropagation(); });
+      el.addEventListener('click', (e)=> e.stopPropagation());
     });
     renderUpcoming();
   }
@@ -1667,10 +1698,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="quick-evt-actions">
           <button class="btn primary" id="saveEvent">Создать</button>
           <button class="btn ghost" id="cancelEvent">Отменить</button>
+          <a href="#" id="fullFormLink" style="margin-left:auto; align-self:center; font-size:12.3px; color:var(--wine); text-decoration:underline;">Полная форма</a>
         </div>
       </div>`;
     document.getElementById('closeModal4').addEventListener('click', closeModal);
     document.getElementById('cancelEvent').addEventListener('click', closeModal);
+    document.getElementById('fullFormLink').addEventListener('click', (e)=>{
+      e.preventDefault();
+      openFullEventForm(document.getElementById('e_date').value, document.getElementById('e_title').value);
+    });
     document.getElementById('e_allday').addEventListener('change', (e)=>{
       document.getElementById('e_start').disabled = e.target.checked;
       document.getElementById('e_end').disabled = e.target.checked;
@@ -1686,6 +1722,57 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       await setShared(K_EVENTS, events);
       await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}${startTime?' в '+startTime:''}`);
       closeModal(); renderAll(); showToast('Событие добавлено');
+    });
+    document.getElementById('overlay').classList.add('show');
+  }
+  // Полная форма — как в Битриксе: важное событие, отдельные дата+время начала
+  // и завершения, место, напоминание. Без выбора календаря/участников — тут
+  // календарь один общий на всю команду, это было бы лишней сложностью.
+  function openFullEventForm(prefillDate, prefillTitle){
+    const modal = document.getElementById('modalBox');
+    modal.className = 'modal';
+    const d = prefillDate || new Date().toISOString().slice(0,10);
+    modal.innerHTML = `
+      <div class="modal-head"><div><h2>Новое событие</h2></div><button class="close-btn" id="closeFullEvt"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field"><label>Название *</label><input class="in" id="fe_title" value="${esc(prefillTitle||'')}"></div>
+        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_important"> 🔥 Это важное событие</label>
+        <div class="field-row">
+          <div class="field"><label>Дата и время начала</label><input class="in" type="date" id="fe_date_start" value="${d}"></div>
+          <div class="field"><label>&nbsp;</label><input class="in" type="time" id="fe_time_start" value="09:00"></div>
+          <div class="field"><label>Дата и время завершения</label><input class="in" type="date" id="fe_date_end" value="${d}"></div>
+          <div class="field"><label>&nbsp;</label><input class="in" type="time" id="fe_time_end" value="10:00"></div>
+        </div>
+        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_allday"> Весь день</label>
+        <div class="field"><label>Место проведения</label><input class="in" id="fe_location" placeholder="Необязательно"></div>
+        <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_notify" checked> Оповестить команду в ленте</label>
+        <button class="btn primary" id="saveFullEvent" style="align-self:flex-start;">Сохранить</button>
+      </div>`;
+    document.getElementById('closeFullEvt').addEventListener('click', closeModal);
+    document.getElementById('fe_allday').addEventListener('change', (e)=>{
+      document.getElementById('fe_time_start').disabled = e.target.checked;
+      document.getElementById('fe_time_end').disabled = e.target.checked;
+    });
+    document.getElementById('saveFullEvent').addEventListener('click', async ()=>{
+      const title = document.getElementById('fe_title').value.trim();
+      const date = document.getElementById('fe_date_start').value;
+      if(!title || !date) return;
+      const allDay = document.getElementById('fe_allday').checked;
+      const ev = {
+        id: uid(), title, date,
+        dateEnd: document.getElementById('fe_date_end').value || date,
+        startTime: allDay ? '' : document.getElementById('fe_time_start').value,
+        endTime: allDay ? '' : document.getElementById('fe_time_end').value,
+        important: document.getElementById('fe_important').checked,
+        location: document.getElementById('fe_location').value.trim(),
+        createdBy: me,
+      };
+      events.push(ev);
+      await setShared(K_EVENTS, events);
+      if(document.getElementById('fe_notify').checked){
+        await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}${ev.startTime?' в '+ev.startTime:''}${ev.important?' 🔥':''}`);
+      }
+      closeModal(); renderAll(); showToast('Событие сохранено');
     });
     document.getElementById('overlay').classList.add('show');
   }
@@ -1781,13 +1868,38 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function getAllManagerEntries(){
     const extra = Object.keys(roles).filter(n=> (roles[n]==='manager'||roles[n]==='curator') && !managers.some(m=>m.name===n));
     const synthetic = extra.map(n=>({name:n, planAnk:0, factAnk:0, cleanMen:0, scammers:0, hoursMonth:0, earnedTotal:0, planMonth:0, weeks:[0,0,0,0]}));
-    return [...managers, ...synthetic];
+    return [...managers, ...synthetic].map(m=>{
+      const ov = planOverrides[m.name];
+      return ov ? {...m, planAnk: ov.planAnk!=null?ov.planAnk:m.planAnk, planMonth: ov.planMonth!=null?ov.planMonth:m.planMonth} : m;
+    });
   }
   document.getElementById('ratingFormulaLink')?.addEventListener('click', (e)=>{
     e.preventDefault();
     const el = document.getElementById('ratingFormulaDetail');
     el.style.display = el.style.display==='none' ? '' : 'none';
   });
+  function openPlanEditor(name, planAnk, planMonth){
+    const modal = document.getElementById('modalBox');
+    modal.innerHTML = `
+      <div class="modal-head"><div><h2>План для ${esc(name)}</h2></div><button class="close-btn" id="closePlanModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field-row">
+          <div class="field"><label>План анкет (штук)</label><input class="in" type="number" min="0" id="pe_ank" value="${planAnk||0}"></div>
+          <div class="field"><label>План на месяц (₽)</label><input class="in" type="number" min="0" id="pe_month" value="${planMonth||0}"></div>
+        </div>
+        <button class="btn primary" id="savePlan" style="align-self:flex-start;">Сохранить план</button>
+      </div>`;
+    document.getElementById('closePlanModal').addEventListener('click', closeModal);
+    document.getElementById('savePlan').addEventListener('click', async ()=>{
+      const planAnkVal = Math.max(0, Number(document.getElementById('pe_ank').value)||0);
+      const planMonthVal = Math.max(0, Number(document.getElementById('pe_month').value)||0);
+      planOverrides[name] = {planAnk: planAnkVal, planMonth: planMonthVal};
+      await setShared(K_PLANS, planOverrides);
+      await logActivity('note', `выставил(а) план для <b>${esc(name)}</b>: ${planAnkVal} анкет / ${planMonthVal} ₽ в месяц`);
+      closeModal(); renderAll(); showToast('План сохранён');
+    });
+    document.getElementById('overlay').classList.add('show');
+  }
   function renderManagers(){
     const metrics = computeManagerMetrics();
     const allManagers = getAllManagerEntries();
@@ -1800,6 +1912,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <div style="margin-left:auto; text-align:right;"><div style="font-family:'Inter',sans-serif; font-weight:700; font-size:22px; color:var(--gold);">${met.score!=null?met.score:'—'}</div><div style="font-size:10px; color:var(--muted);">рейтинг</div></div>
         </div>
         <div class="progress-wrap"><div class="progress-lbl"><span>Анкеты: план ${m.planAnk} / факт ${m.factAnk}</span><span class="mono">${pct}%</span></div><div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div></div>
+        ${(myRole==='admin'||myRole==='curator') ? `<button class="btn ghost sm" data-editplan="${esc(m.name)}" data-ank="${m.planAnk}" data-month="${m.planMonth}" style="margin-bottom:10px;">✏️ Изменить план</button>` : ''}
         <div class="mgr-stats">
           <div class="st"><div class="n">${m.cleanMen}</div><div class="l">Чистых мужчин найдено</div></div>
           <div class="st"><div class="n">${m.scammers}</div><div class="l">Мошенников</div></div>
@@ -1814,6 +1927,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         </div>
       </div>`;
     }).join('');
+    document.querySelectorAll('#mgrGrid [data-editplan]').forEach(btn=> btn.addEventListener('click', ()=>{
+      openPlanEditor(btn.dataset.editplan, Number(btn.dataset.ank), Number(btn.dataset.month));
+    }));
     const byMgr = {}; clients.forEach(c=>{ const k=c.manager||'Без менеджера'; byMgr[k]=(byMgr[k]||0)+1; });
     const maxMgr = Math.max(1, ...Object.values(byMgr));
     document.getElementById('byMgrCount').innerHTML = Object.entries(byMgr).sort((a,b)=>b[1]-a[1]).map(([n,c])=>`
@@ -2144,6 +2260,74 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     });
     return xlsxLoading;
   }
+  document.getElementById('importExcelBtn').addEventListener('click', ()=> document.getElementById('importExcelInput').click());
+  document.getElementById('wipeAllBtn').addEventListener('click', async ()=>{
+    const count = clients.length;
+    if(!confirm(`Точно удалить ВСЕ ${count} анкет? Это нельзя отменить.`)) return;
+    const typed = prompt('Для подтверждения впиши слово УДАЛИТЬ заглавными буквами:');
+    if(typed !== 'УДАЛИТЬ'){ showToast('Не совпало — ничего не удалено'); return; }
+    clients = [];
+    await setShared(K_CLIENTS, clients);
+    await logActivity('note', `<b>очистил(а) всю базу анкет</b> — удалено ${count} анкет`);
+    renderAll();
+    showToast(`Удалено ${count} анкет. База пустая.`);
+  });
+  document.getElementById('importExcelInput').addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    showToast('Читаю файл…');
+    try{ await loadXLSX(); }catch(err){ showToast('Не получилось загрузить модуль Excel'); return; }
+    try{
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const sheetNames = ['Анкеты','Регистрация Тест'].filter(s=>wb.SheetNames.includes(s));
+      if(!sheetNames.length){ showToast('В файле нет листов «Анкеты» / «Регистрация Тест»'); return; }
+      const existingNums = new Set(clients.map(c=>String(c.num||'').trim()).filter(Boolean));
+      let added = 0, skipped = 0;
+      for(const sname of sheetNames){
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sname], {defval:''});
+        for(const r of rows){
+          const name = String(r['Имя']||'').trim();
+          if(!name) continue;
+          let num = r['№']; num = (num===undefined||num===null) ? '' : String(num).trim().replace(/\.0$/,'');
+          if(num && existingNums.has(num)){ skipped++; continue; }
+          const candidates = [];
+          ['1й мужчина','2й мужчина','3й мужчина','4й мужчина','5й мужчина'].forEach(k=>{
+            const v = String(r[k]||'').trim(); if(v) candidates.push(v);
+          });
+          const banStr = String(r['Бан?']||'').trim();
+          const refundStr = String(r['Возврат средств']||'').trim().toLowerCase();
+          const closedStr = String(r['Проект Закрыт?']||'').trim();
+          let stage = 'new';
+          if(closedStr==='1'||closedStr==='1.0') stage = 'closed_won';
+          else if(refundStr==='true'||refundStr==='1') stage = 'refund';
+          else if(candidates.length>=3) stage = 'all_found';
+          else if(candidates.length>0) stage = 'searching';
+          const c = {
+            id: uid(), num, name,
+            city: String(r['Город']||'').trim(), countries: String(r['Страна муж.']||'').trim(),
+            age: String(r['Возраст']||'').trim().replace(/\.0$/,''), manager: String(r['Ответственный']||'').trim(),
+            phone: String(r['Телефон']||'').trim(), description: String(r['Описание']||'').trim(),
+            requirements: String(r['Требования']||'').trim(), ageRange: String(r['Возраст муж']||'').trim(),
+            candidates, comment: String(r['Комментарий']||'').trim(), login: String(r['Email + password']||'').trim(),
+            date: new Date().toISOString().slice(0,10), createdAt: Date.now(), stage,
+            banned: banStr==='1'||banStr==='1.0', priority:false, reger:'', problemNote:'', note:''
+          };
+          clients.push(c);
+          if(num) existingNums.add(num);
+          added++;
+        }
+      }
+      if(added>0) await setShared(K_CLIENTS, clients);
+      await logActivity('note', `импортировал(а) анкеты из Excel: добавлено ${added}, пропущено как уже существующие ${skipped}`);
+      renderAll();
+      showToast(`Готово: добавлено ${added}, пропущено ${skipped} (уже были)`);
+    }catch(err){
+      console.warn('import failed', err);
+      showToast('Не получилось прочитать файл — проверь формат');
+    }
+  });
   document.getElementById('exportExcelBtn').addEventListener('click', async ()=>{
     showToast('Готовлю файл…');
     try{ await loadXLSX(); }catch(e){ showToast('Не получилось загрузить модуль экспорта, проверь интернет'); return; }
@@ -2285,12 +2469,12 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function pollLoop(){
     setInterval(async ()=>{
       await touchPresence();
-      const [c,t,a,ev,pr,ro,pe,pa,pw,lg,ms,rv,sh] = await Promise.all([
+      const [c,t,a,ev,pr,ro,pe,pa,pw,lg,ms,rv,sh,pl] = await Promise.all([
         getShared(K_CLIENTS, clients), getShared(K_TASKS, tasks), getShared(K_ACTIVITY, activity),
         getShared(K_EVENTS, events), getShared(K_PRESENCE, presence), getShared(K_ROLES, roles),
         getShared(K_PEOPLE, people), getShared(K_PAYMENTS, payments),
         getShared(K_PASSWORDS, passwords), getShared(K_LEDGER, ledger), getShared(K_MESSAGES, messages),
-        getShared(K_REVIEWS, reviews), getShared(K_SHIFTS, shifts)
+        getShared(K_REVIEWS, reviews), getShared(K_SHIFTS, shifts), getShared(K_PLANS, planOverrides)
       ]);
       clients = isRecentLocalWrite(K_CLIENTS) ? clients : c;
       tasks = isRecentLocalWrite(K_TASKS) ? tasks : t;
@@ -2305,6 +2489,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       messages = isRecentLocalWrite(K_MESSAGES) ? messages : ms;
       reviews = isRecentLocalWrite(K_REVIEWS) ? reviews : rv;
       shifts = isRecentLocalWrite(K_SHIFTS) ? shifts : sh;
+      planOverrides = isRecentLocalWrite(K_PLANS) ? planOverrides : pl;
       myRole = roles[me] || 'pending';
       isSuperAdmin = !!(ADMIN_ACCOUNTS[me] && ADMIN_ACCOUNTS[me].super);
       document.getElementById('navAdminBtn').style.display = myRole==='admin' ? '' : 'none';
