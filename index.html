@@ -646,6 +646,11 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
           <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Удаляет вообще ВСЕ анкеты из базы без возможности отменить. Используй, если хочешь начать с чистого листа перед реальным импортом.</p>
           <button class="btn danger sm" id="wipeAllBtn">🗑 Очистить всю базу анкет</button>
         </div>
+        <div class="card" style="margin-top:16px;">
+          <h3 class="section-title">Почистить имена менеджеров</h3>
+          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Если в фильтрах одно и то же имя менеджера показывается дважды — значит где-то в старых данных затесались лишние пробелы. Эта кнопка один раз пройдётся по всем анкетам и срежет их, без изменения самих назначений.</p>
+          <button class="btn ghost sm" id="cleanManagerNamesBtn">🧹 Почистить пробелы в именах</button>
+        </div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Экспорт и бэкап</h3>
           <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Выгрузить всю базу анкет в Excel — для отчётов</p>
           <button class="btn primary sm" id="exportExcelBtn">Скачать отчёт .xlsx</button>
@@ -1174,7 +1179,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       filterWrap.style.display = '';
       const sel = document.getElementById('boardManagerFilter');
       const cur = sel.value || boardManagerFilter;
-      const names = [...new Set(clients.map(c=>c.manager).filter(Boolean))].sort();
+      const names = [...new Set(clients.map(c=>String(c.manager||'').trim()).filter(Boolean))].sort();
       sel.innerHTML = '<option value="">Все аккаунты (все менеджеры)</option>' + names.map(n=>`<option value="${esc(n)}">Только ${esc(n)}</option>`).join('');
       sel.value = cur; boardManagerFilter = cur;
     }else{
@@ -1182,7 +1187,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       boardManagerFilter = '';
     }
     let my = scoped(clients);
-    if(boardManagerFilter) my = my.filter(c=>c.manager===boardManagerFilter);
+    if(boardManagerFilter) my = my.filter(c=>String(c.manager||'').trim()===boardManagerFilter);
     const board = document.getElementById('board');
     board.innerHTML = cols.map(col=>{
       const items = my.filter(col.test);
@@ -1237,7 +1242,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     // менеджеру этот фильтр не нужен — он и так видит только свои анкеты,
     // а disabled-выпадашка выглядела как сломанная кнопка. Просто прячем.
     sel.style.display = myRole==='manager' ? 'none' : '';
-    const names = [...new Set(scoped(clients).map(c=>c.manager).filter(Boolean))].sort();
+    const names = [...new Set(scoped(clients).map(c=>String(c.manager||'').trim()).filter(Boolean))].sort();
     sel.innerHTML = '<option value="">Все менеджеры</option>' + names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
     sel.value = cur;
     const stSel = document.getElementById('stageFilter'); const curSt = stSel.value;
@@ -1250,7 +1255,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const st = document.getElementById('stageFilter').value;
     const now = Date.now();
     return scoped(clients).filter(c=>{
-      if(mgr && c.manager!==mgr) return false;
+      if(mgr && String(c.manager||'').trim()!==mgr) return false;
       if(st && c.stage!==st) return false;
       if(activeQuickFilters.has('priority') && !c.priority) return false;
       if(activeQuickFilters.has('free') && c.manager) return false;
@@ -1847,7 +1852,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   // 3 дня, пока он был в отпуске» не портит статистику несправедливо.
   function computeManagerMetrics(){
     const roleNames = Object.keys(roles).filter(n=> roles[n]==='manager' || roles[n]==='curator');
-    const names = [...new Set([...managers.map(m=>m.name), ...roleNames, ...clients.map(c=>c.manager).filter(Boolean)])];
+    const names = [...new Set([...managers.map(m=>m.name), ...roleNames, ...clients.map(c=>String(c.manager||'').trim()).filter(Boolean)])];
     const raw = {};
     names.forEach(n=>{
       const mine = clients.filter(c=>c.manager===n);
@@ -2437,6 +2442,20 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     await logActivity('note', `<b>очистил(а) всю базу анкет</b> — удалено ${count} анкет`);
     renderAll();
     showToast(`Удалено ${count} анкет. База пустая.`);
+  });
+  document.getElementById('cleanManagerNamesBtn').addEventListener('click', async ()=>{
+    let fixed = 0;
+    clients.forEach(c=>{
+      const trimmed = String(c.manager||'').trim().replace(/\s+/g,' ');
+      if(trimmed !== (c.manager||'')){ c.manager = trimmed; fixed++; }
+      const trimmedReger = String(c.reger||'').trim().replace(/\s+/g,' ');
+      if(trimmedReger !== (c.reger||'')){ c.reger = trimmedReger; }
+    });
+    if(!fixed){ showToast('Пробелов не нашлось — всё уже чисто'); return; }
+    await setShared(K_CLIENTS, clients);
+    await logActivity('note', `почистил(а) пробелы в именах менеджеров — поправлено ${fixed} анкет`);
+    renderAll();
+    showToast(`Готово, поправлено анкет: ${fixed}`);
   });
   document.getElementById('importExcelInput').addEventListener('change', async (e)=>{
     const file = e.target.files[0];
