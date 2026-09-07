@@ -648,7 +648,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         </div>
         <div class="card" style="margin-top:16px;">
           <h3 class="section-title">Почистить имена менеджеров</h3>
-          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Если в фильтрах одно и то же имя менеджера показывается дважды — значит где-то в старых данных затесались лишние пробелы. Эта кнопка один раз пройдётся по всем анкетам и срежет их, без изменения самих назначений.</p>
+          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Если одно и то же имя менеджера показывается в фильтрах несколько раз — значит где-то в данных затесались лишние пробелы или перепутанные русские/латинские буквы, которые выглядят одинаково. Кнопка найдёт такие пары и предложит объединить в самый частый вариант написания (спросит подтверждение и покажет список перед объединением).</p>
           <button class="btn ghost sm" id="cleanManagerNamesBtn">🧹 Почистить пробелы в именах</button>
         </div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Экспорт и бэкап</h3>
@@ -2444,18 +2444,56 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     showToast(`Удалено ${count} анкет. База пустая.`);
   });
   document.getElementById('cleanManagerNamesBtn').addEventListener('click', async ()=>{
-    let fixed = 0;
+    // Пробелы — не единственная причина дублей: "Саша" кириллицей и "Саша" с
+    // одной-двумя латинскими буквами выглядят абсолютно одинаково на экране,
+    // но для компьютера это разные строки. Группируем по "похожести" (без
+    // пробелов, без учёта регистра, кириллица/латиница сведены к одному виду)
+    // и объединяем в самый частый вариант написания.
+    const HOMOGLYPH = {'a':'а','b':'в','c':'с','e':'е','h':'н','k':'к','m':'м','o':'о','p':'р','t':'т','x':'х','y':'у'};
+    function normKey(s){
+      return String(s||'').trim().toLowerCase().replace(/\s+/g,' ')
+        .split('').map(ch=>HOMOGLYPH[ch]||ch).join('');
+    }
+    const groups = {};
     clients.forEach(c=>{
-      const trimmed = String(c.manager||'').trim().replace(/\s+/g,' ');
-      if(trimmed !== (c.manager||'')){ c.manager = trimmed; fixed++; }
-      const trimmedReger = String(c.reger||'').trim().replace(/\s+/g,' ');
-      if(trimmedReger !== (c.reger||'')){ c.reger = trimmedReger; }
+      const raw = String(c.manager||'').trim().replace(/\s+/g,' ');
+      if(!raw) return;
+      const key = normKey(raw);
+      groups[key] = groups[key] || {};
+      groups[key][raw] = (groups[key][raw]||0) + 1;
     });
-    if(!fixed){ showToast('Пробелов не нашлось — всё уже чисто'); return; }
+    const merges = [];
+    Object.values(groups).forEach(variants=>{
+      const entries = Object.entries(variants);
+      if(entries.length<2) return;
+      entries.sort((a,b)=>b[1]-a[1]);
+      const canonical = entries[0][0];
+      entries.slice(1).forEach(([variant,count])=> merges.push({variant, canonical, count}));
+    });
+    if(!merges.length){
+      // всё равно срежем обычные пробелы на всякий случай
+      let fixed = 0;
+      clients.forEach(c=>{
+        const trimmed = String(c.manager||'').trim().replace(/\s+/g,' ');
+        if(trimmed !== (c.manager||'')){ c.manager = trimmed; fixed++; }
+      });
+      if(fixed){ await setShared(K_CLIENTS, clients); await logActivity('note', `почистил(а) пробелы в именах менеджеров — поправлено ${fixed} анкет`); renderAll(); showToast(`Поправлено анкет: ${fixed}`); }
+      else showToast('Дублей и пробелов не нашлось — всё уже чисто');
+      return;
+    }
+    const summary = merges.map(m=>`«${m.variant}» (${m.count} анкет) → «${m.canonical}»`).join('\n');
+    if(!confirm(`Нашёл похожие-но-разные имена менеджеров:\n\n${summary}\n\nОбъединить в самый частый вариант написания? Назначения анкет не поменяются, поменяется только написание имени.`)) return;
+    let totalFixed = 0;
+    clients.forEach(c=>{
+      const raw = String(c.manager||'').trim().replace(/\s+/g,' ');
+      const m = merges.find(x=>x.variant===raw);
+      if(m){ c.manager = m.canonical; totalFixed++; }
+      else if(raw !== (c.manager||'')){ c.manager = raw; }
+    });
     await setShared(K_CLIENTS, clients);
-    await logActivity('note', `почистил(а) пробелы в именах менеджеров — поправлено ${fixed} анкет`);
+    await logActivity('note', `объединил(а) похожие имена менеджеров (кириллица/латиница, пробелы) — поправлено ${totalFixed} анкет`);
     renderAll();
-    showToast(`Готово, поправлено анкет: ${fixed}`);
+    showToast(`Готово, объединено анкет: ${totalFixed}`);
   });
   document.getElementById('importExcelInput').addEventListener('change', async (e)=>{
     const file = e.target.files[0];
