@@ -591,6 +591,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     <section id="view-people" style="display:none;">
       <div class="topbar"><div><h1>Люди</h1><p>Команда, роли и нагрузка каждого</p></div></div>
       <div class="card" id="peopleList"></div>
+      <div id="peopleGhosts"></div>
     </section>
 
     <section id="view-payments" style="display:none;">
@@ -2142,6 +2143,41 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       renderPeople();
     }));
     document.querySelectorAll('#peopleList [data-open-person]').forEach(row=> row.addEventListener('click', ()=> openPersonDetail(row.dataset.openPerson)));
+    // "Призраки" — имена, которые встречаются в поле "Менеджер" у анкет, но
+    // никогда не логинились и не имеют роли. Их анкеты реально существуют, но
+    // нигде выше в списке не посчитаны — отсюда ощущение "цифры не сходятся".
+    const ghostCounts = {};
+    clients.forEach(c=>{
+      const m = String(c.manager||'').trim();
+      if(m && !allNames.includes(m)) ghostCounts[m] = (ghostCounts[m]||0)+1;
+    });
+    const ghostBox = document.getElementById('peopleGhosts');
+    if(ghostBox){
+      const entries = Object.entries(ghostCounts).sort((a,b)=>b[1]-a[1]);
+      ghostBox.innerHTML = !entries.length ? '' : `
+        <div class="card" style="margin-top:16px; border-color:var(--rust);">
+          <h3 class="section-title" style="color:var(--rust);">Есть анкеты без реального человека (${entries.length})</h3>
+          <p style="font-size:12.5px; color:var(--muted); margin:0 0 10px;">Эти имена записаны в анкетах как менеджер, но под ними никто ни разу не логинился — их анкеты не попадают ни в чью статистику выше. Либо это чей-то ник (перепиши на настоящее имя), либо человек ещё просто не заходил в CRM.</p>
+          ${entries.map(([n,cnt])=>`
+            <div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
+              <div class="avatar sm">${initials(n)}</div>
+              <div style="flex:1; font-size:13px;"><b>${esc(n)}</b> — ${cnt} анкет</div>
+              <input class="in" style="width:160px;" placeholder="настоящее имя" id="ghostTo-${esc(n)}">
+              <button class="btn primary sm" data-ghostfix="${esc(n)}">Переименовать</button>
+            </div>`).join('')}
+        </div>`;
+      ghostBox.querySelectorAll('[data-ghostfix]').forEach(btn=> btn.addEventListener('click', async ()=>{
+        const from = btn.dataset.ghostfix;
+        const to = document.getElementById('ghostTo-'+from).value.trim();
+        if(!to) return;
+        if(!confirm(`Переписать «${from}» на «${to}» во всех анкетах?`)) return;
+        let n = 0;
+        clients.forEach(c=>{ if(String(c.manager||'').trim()===from){ c.manager = to; n++; } });
+        await setShared(K_CLIENTS, clients);
+        await logActivity('note', `переименовал(а) менеджера «${esc(from)}» → «${esc(to)}» — поправлено ${n} анкет`);
+        renderAll(); showToast(`Готово, поправлено анкет: ${n}`);
+      }));
+    }
   }
 
   // ================= PAYMENTS =================
