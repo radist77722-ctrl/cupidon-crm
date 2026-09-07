@@ -598,7 +598,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
     </section>
 
     <section id="view-balance" style="display:none;">
-      <div class="topbar"><div><h1>Баланс</h1><p>Начисления менеджерам и регерам за выбранный период</p></div></div>
+      <div class="topbar"><div><h1>Баланс</h1><p>Начисления менеджерам и регерам за выбранный период</p></div><button class="btn primary sm" id="addLedgerBtn" style="display:none;">+ начисление</button></div>
       <div class="period-bar">
         <button class="chip" data-bperiod="week">Эта неделя</button>
         <button class="chip on" data-bperiod="month">Этот месяц</button>
@@ -982,6 +982,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     document.getElementById('meAvatar').textContent = initials(me);
     document.getElementById('meRoleLabel').innerHTML = `${isSuperAdmin?'Главный админ':ROLE_LABEL[myRole]} · сменить`;
     document.getElementById('navAdminBtn').style.display = myRole==='admin' ? '' : 'none';
+    document.getElementById('addLedgerBtn').style.display = myRole==='admin' ? '' : 'none';
     updatePendingUI();
     touchPresence();
     boot();
@@ -1354,7 +1355,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       <div class="modal-head">
         <div style="display:flex; gap:14px; align-items:center;">
           <div class="avatar" style="width:46px;height:46px;font-size:17px;">${initials(c.name)}</div>
-          <div><h2><span class="star" id="starToggle">${c.priority?'⭐':'☆'}</span>${esc(c.name)}${c.age?', '+esc(c.age)+' лет':''}</h2><div class="sub">${esc(c.city)||'—'} · Анкета №${esc(c.num)||c.id} · создана ${esc(c.date)||'—'}</div></div>
+          <div><h2><span class="star" id="starToggle">${c.priority?'⭐':'☆'}</span>№${esc(c.num)||c.id} · ${esc(c.name)}</h2><div class="sub">${esc(c.city)||'—'}${c.age?' · '+esc(c.age)+' лет':''} · создана ${esc(c.date)||'—'}</div></div>
         </div>
         <button class="close-btn" id="closeModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
@@ -1744,7 +1745,17 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <div class="field"><label>&nbsp;</label><input class="in" type="time" id="fe_time_end" value="10:00"></div>
         </div>
         <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_allday"> Весь день</label>
-        <div class="field"><label>Место проведения</label><input class="in" id="fe_location" placeholder="Необязательно"></div>
+        <div class="field-row">
+          <div class="field"><label>Повторять</label>
+            <select class="in" id="fe_repeat">
+              <option value="">Не повторять</option>
+              <option value="daily">Каждый день</option>
+              <option value="weekly">Каждую неделю</option>
+              <option value="monthly">Каждый месяц</option>
+            </select>
+          </div>
+          <div class="field" id="fe_repeat_until_wrap" style="display:none;"><label>Повторять до</label><input class="in" type="date" id="fe_repeat_until"></div>
+        </div>
         <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_notify" checked> Оповестить команду в ленте</label>
         <button class="btn primary" id="saveFullEvent" style="align-self:flex-start;">Сохранить</button>
       </div>`;
@@ -1753,26 +1764,44 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       document.getElementById('fe_time_start').disabled = e.target.checked;
       document.getElementById('fe_time_end').disabled = e.target.checked;
     });
+    document.getElementById('fe_repeat').addEventListener('change', (e)=>{
+      document.getElementById('fe_repeat_until_wrap').style.display = e.target.value ? '' : 'none';
+    });
+    attachDatePicker('fe_date_start'); attachDatePicker('fe_date_end'); attachDatePicker('fe_repeat_until');
     document.getElementById('saveFullEvent').addEventListener('click', async ()=>{
       const title = document.getElementById('fe_title').value.trim();
       const date = document.getElementById('fe_date_start').value;
       if(!title || !date) return;
       const allDay = document.getElementById('fe_allday').checked;
-      const ev = {
-        id: uid(), title, date,
-        dateEnd: document.getElementById('fe_date_end').value || date,
-        startTime: allDay ? '' : document.getElementById('fe_time_start').value,
-        endTime: allDay ? '' : document.getElementById('fe_time_end').value,
-        important: document.getElementById('fe_important').checked,
-        location: document.getElementById('fe_location').value.trim(),
-        createdBy: me,
-      };
-      events.push(ev);
+      const dateEnd = document.getElementById('fe_date_end').value || date;
+      const important = document.getElementById('fe_important').checked;
+      const startTime = allDay ? '' : document.getElementById('fe_time_start').value;
+      const endTime = allDay ? '' : document.getElementById('fe_time_end').value;
+      const repeat = document.getElementById('fe_repeat').value;
+      const repeatUntil = document.getElementById('fe_repeat_until').value;
+      // при повторении генерируем реальные отдельные события (максимум 52 —
+      // этого с запасом хватает на год еженедельных встреч), а не храним
+      // абстрактное правило, которое потом сложнее было бы двигать/удалять по одному
+      const groupId = repeat ? uid() : null;
+      const occurrences = [];
+      let curStart = new Date(date+'T00:00:00'), curEnd = new Date(dateEnd+'T00:00:00');
+      const untilTs = repeatUntil ? new Date(repeatUntil+'T23:59:59').getTime() : (Date.now()+365*24*60*60*1000);
+      let guard = 0;
+      do{
+        occurrences.push({start: curStart.toISOString().slice(0,10), end: curEnd.toISOString().slice(0,10)});
+        if(repeat==='daily'){ curStart.setDate(curStart.getDate()+1); curEnd.setDate(curEnd.getDate()+1); }
+        else if(repeat==='weekly'){ curStart.setDate(curStart.getDate()+7); curEnd.setDate(curEnd.getDate()+7); }
+        else if(repeat==='monthly'){ curStart.setMonth(curStart.getMonth()+1); curEnd.setMonth(curEnd.getMonth()+1); }
+        guard++;
+      } while(repeat && curStart.getTime()<=untilTs && guard<52);
+      occurrences.forEach(o=>{
+        events.push({id:uid(), title, date:o.start, dateEnd:o.end, startTime, endTime, important, createdBy:me, repeatGroup:groupId});
+      });
       await setShared(K_EVENTS, events);
       if(document.getElementById('fe_notify').checked){
-        await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}${ev.startTime?' в '+ev.startTime:''}${ev.important?' 🔥':''}`);
+        await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}${startTime?' в '+startTime:''}${important?' 🔥':''}${repeat?` (повтор: ${occurrences.length} раз)`:''}`);
       }
-      closeModal(); renderAll(); showToast('Событие сохранено');
+      closeModal(); renderAll(); showToast(repeat ? `Добавлено ${occurrences.length} событий` : 'Событие сохранено');
     });
     document.getElementById('overlay').classList.add('show');
   }
@@ -1937,6 +1966,31 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   }
 
   // ================= PEOPLE =================
+  function openPersonDetail(n){
+    const modal = document.getElementById('modalBox');
+    modal.className = 'modal';
+    const now = new Date();
+    const weekDay = (now.getDay()+6)%7;
+    const weekStart = new Date(now); weekStart.setDate(now.getDate()-weekDay); weekStart.setHours(0,0,0,0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const weekMs = computeShiftMs(n, weekStart.getTime(), Date.now());
+    const monthMs = computeShiftMs(n, monthStart, Date.now());
+    const myEvents = events.filter(e=>e.createdBy===n).sort((a,b)=> b.date.localeCompare(a.date)).slice(0,15);
+    modal.innerHTML = `
+      <div class="modal-head"><div><h2>${esc(n)}</h2><div class="sub">Часы по сменам и её события в календаре</div></div>
+        <button class="close-btn" id="closePersonModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="mgr-stats">
+          <div class="st"><div class="n">${fmtDuration(weekMs)}</div><div class="l">Отработано за эту неделю</div></div>
+          <div class="st"><div class="n">${fmtDuration(monthMs)}</div><div class="l">Отработано за этот месяц</div></div>
+        </div>
+        <div class="block" style="margin-top:14px;"><h4>События в календаре (последние)</h4>
+          ${myEvents.length ? myEvents.map(e=>`<div style="display:flex; justify-content:space-between; padding:7px 0; border-bottom:1px solid var(--line); font-size:12.5px;"><span>${e.important?'🔥 ':''}${esc(e.title)}</span><span style="color:var(--muted);">${new Date(e.date+'T00:00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'short'})}${e.startTime?' · '+esc(e.startTime):''}</span></div>`).join('') : '<div class="empty" style="padding:12px;">Событий пока нет</div>'}
+        </div>
+      </div>`;
+    document.getElementById('closePersonModal').addEventListener('click', closeModal);
+    document.getElementById('overlay').classList.add('show');
+  }
   function renderPeople(){
     const canConfirm = myRole==='admin' || myRole==='curator';
     const allNames = [...new Set([...knownNames, ...people.map(p=>p.name)])];
@@ -1951,13 +2005,14 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <button class="btn ghost sm" data-pconfirm="${esc(n)}" data-role="reger">Как регера</button>
         </div>`;
       }
-      return `<div class="people-row">
+      return `<div class="people-row" ${canConfirm?`data-open-person="${esc(n)}" style="cursor:pointer;"`:''}>
         <div class="avatar">${initials(n)}</div>
         <div class="people-main"><div class="people-name">${esc(n)}${n===me?' (ты)':''}</div><div class="people-count">${cnt} анкет в работе</div></div>
         ${pill('role-'+role, {['role-'+role]: ROLE_LABEL[role]})}
       </div>`;
     }).join('') || '<div class="empty">Пока никого нет</div>';
-    document.querySelectorAll('#peopleList [data-pconfirm]').forEach(btn=> btn.addEventListener('click', async ()=>{
+    document.querySelectorAll('#peopleList [data-pconfirm]').forEach(btn=> btn.addEventListener('click', async (e)=>{
+      e.stopPropagation();
       const n = btn.dataset.pconfirm, r = btn.dataset.role;
       roles[n] = r;
       await setShared(K_ROLES, roles);
@@ -1965,6 +2020,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       showToast(`${n}: ${ROLE_LABEL[r]}`);
       renderPeople();
     }));
+    document.querySelectorAll('#peopleList [data-open-person]').forEach(row=> row.addEventListener('click', ()=> openPersonDetail(row.dataset.openPerson)));
   }
 
   // ================= PAYMENTS =================
@@ -1973,6 +2029,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       <div class="pay-row">
         <div class="pay-main"><div class="pay-title">${esc(p.comment)}</div><div class="pay-sub">от ${esc(p.from)} · ${fmtTime(p.ts)}</div></div>
         ${p.status==='done' ? pill('done',{done:'Пополнено'}) : `<button class="btn primary sm" data-id="${p.id}">Отметить пополненным</button>`}
+        ${myRole==='admin' ? `<button class="btn danger sm" data-delpay="${p.id}">Удалить</button>` : ''}
       </div>`).join('') : '<div class="empty"><span class="serif">Заявок нет</span>Все инструменты оплачены — или ещё не просили</div>';
     document.querySelectorAll('#payList button[data-id]').forEach(b=> b.addEventListener('click', async ()=>{
       const p = payments.find(x=>x.id===b.dataset.id);
@@ -1980,6 +2037,14 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       await setShared(K_PAYMENTS, payments);
       await logActivity('note', `отметил(а) заявку на оплату «${esc(p.comment)}» как пополненную`);
       renderAll(); showToast('Отмечено');
+    }));
+    document.querySelectorAll('#payList [data-delpay]').forEach(b=> b.addEventListener('click', async ()=>{
+      const p = payments.find(x=>x.id===b.dataset.delpay);
+      if(!p || !confirm(`Удалить заявку «${p.comment}»?`)) return;
+      payments = payments.filter(x=>x.id!==p.id);
+      await setShared(K_PAYMENTS, payments);
+      await logActivity('note', `удалил(а) заявку на оплату «${esc(p.comment)}»`);
+      renderAll(); showToast('Удалено');
     }));
   }
   document.getElementById('addPayBtn').addEventListener('click', ()=>{
@@ -2051,8 +2116,45 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div style="flex:1;"><b>${esc(l.person)}</b> — ${esc(l.reason)}<div style="font-size:11px; color:var(--muted);">${fmtTime(l.ts)}</div></div>
         <span>${l.amount}${l.currency==='USD'?' $':' ₽'}</span>
         ${l.status==='scheduled'?`<span class="pill todo">ждёт ${new Date(l.dueAt).toLocaleDateString('ru-RU')}</span>`:pill('done',{done:'начислено'})}
+        ${myRole==='admin' ? `<button class="btn danger sm" data-delledger="${l.id}">Удалить</button>` : ''}
       </div>`).join('') : '<div class="empty" style="padding:20px;">Начислений пока нет</div>';
+    document.querySelectorAll('#balLedger [data-delledger]').forEach(b=> b.addEventListener('click', async ()=>{
+      const l = ledger.find(x=>x.id===b.dataset.delledger);
+      if(!l || !confirm(`Удалить начисление «${l.reason}» (${l.amount}${l.currency==='USD'?'$':'₽'}) у ${l.person}?`)) return;
+      ledger = ledger.filter(x=>x.id!==l.id);
+      await setShared(K_LEDGER, ledger);
+      await logActivity('note', `удалил(а) начисление «${esc(l.reason)}» у <b>${esc(l.person)}</b>`);
+      renderAll(); showToast('Удалено');
+    }));
   }
+  document.getElementById('addLedgerBtn').addEventListener('click', ()=>{
+    const modal = document.getElementById('modalBox');
+    const allNames = [...new Set([...knownNames, ...people.map(p=>p.name)])];
+    modal.innerHTML = `
+      <div class="modal-head"><div><h2>Добавить начисление</h2></div><button class="close-btn" id="closeLedgerModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field"><label>Кому *</label><select class="in" id="l_person"><option value="">— выбери —</option>${allNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div>
+        <div class="field-row">
+          <div class="field"><label>Сумма *</label><input class="in" type="number" id="l_amount" placeholder="Можно отрицательную — для удержания"></div>
+          <div class="field"><label>Валюта</label><select class="in" id="l_currency"><option value="RUB">₽ рубли</option><option value="USD">$ доллары</option></select></div>
+        </div>
+        <div class="field"><label>За что *</label><input class="in" id="l_reason" placeholder="Причина начисления"></div>
+        <button class="btn primary" id="saveLedger" style="align-self:flex-start;">Начислить</button>
+      </div>`;
+    document.getElementById('closeLedgerModal').addEventListener('click', closeModal);
+    document.getElementById('saveLedger').addEventListener('click', async ()=>{
+      const person = document.getElementById('l_person').value;
+      const amount = Number(document.getElementById('l_amount').value);
+      const reason = document.getElementById('l_reason').value.trim();
+      if(!person || !amount || !reason) return;
+      const currency = document.getElementById('l_currency').value;
+      ledger.push({id:uid(), person, amount, currency, reason, status:'paid', paidAt:Date.now(), ts:Date.now(), createdBy:me});
+      await setShared(K_LEDGER, ledger);
+      await logActivity('note', `вручную начислил(а) <b>${esc(person)}</b>: ${amount}${currency==='USD'?'$':'₽'} — ${esc(reason)}`);
+      closeModal(); renderAll(); showToast('Начислено');
+    });
+    document.getElementById('overlay').classList.add('show');
+  });
 
   // ---------- отдельная кнопка "получить ссылку на отзыв" — сначала выбери анкету ----------
   document.getElementById('rateLinkFabBtn').addEventListener('click', ()=>{
@@ -2493,6 +2595,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       myRole = roles[me] || 'pending';
       isSuperAdmin = !!(ADMIN_ACCOUNTS[me] && ADMIN_ACCOUNTS[me].super);
       document.getElementById('navAdminBtn').style.display = myRole==='admin' ? '' : 'none';
+    document.getElementById('addLedgerBtn').style.display = myRole==='admin' ? '' : 'none';
       document.getElementById('meRoleLabel').innerHTML = `${isSuperAdmin?'Главный админ':ROLE_LABEL[myRole]} · сменить`;
       if(lastKnownRole==='pending' && myRole!=='pending'){
         showToast(`Тебя подтвердили. Роль: ${ROLE_LABEL[myRole]}.`);
