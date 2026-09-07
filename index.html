@@ -635,6 +635,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
       <div id="adminContent" style="display:none;">
         <div class="kpi-grid" id="adminKpi"></div>
         <div class="card"><h3 class="section-title">Назначение ролей и доступ</h3><div id="roleAssign"></div></div>
+        <div class="card" style="margin-top:16px;"><h3 class="section-title">Запросы на передачу анкет</h3><div id="adminTransferRequests"></div></div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Открытые проблемы</h3><div id="adminProblems"></div></div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Импорт анкет из Excel</h3>
           <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Загрузи файл с листами «Анкеты» и «Регистрация Тест» — новые анкеты (по номеру №, которого ещё нет в базе) добавятся, все существующие анкеты не тронутся ни на волос.</p>
@@ -650,6 +651,15 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
           <h3 class="section-title">Почистить имена менеджеров</h3>
           <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Если одно и то же имя менеджера показывается в фильтрах несколько раз — значит где-то в данных затесались лишние пробелы или перепутанные русские/латинские буквы, которые выглядят одинаково. Кнопка найдёт такие пары и предложит объединить в самый частый вариант написания (спросит подтверждение и покажет список перед объединением).</p>
           <button class="btn ghost sm" id="cleanManagerNamesBtn">🧹 Почистить пробелы в именах</button>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <h3 class="section-title">Переименовать менеджера везде</h3>
+          <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Если в таблице кто-то записан под ником (например «Саша» — это на самом деле Александра), выбери старое имя и впиши правильное — перепишет во всех анкетах разом.</p>
+          <div class="field-row">
+            <div class="field"><label>Сейчас записано как</label><select class="in" id="renameFromSel"></select></div>
+            <div class="field"><label>Заменить на</label><input class="in" id="renameToInput" placeholder="Например: Александра"></div>
+          </div>
+          <button class="btn primary sm" id="renameManagerBtn">Переименовать везде</button>
         </div>
         <div class="card" style="margin-top:16px;"><h3 class="section-title">Экспорт и бэкап</h3>
           <p style="font-size:12.8px; color:var(--muted); margin:0 0 10px;">Выгрузить всю базу анкет в Excel — для отчётов</p>
@@ -692,6 +702,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   const K_REVIEWS = 'shared-reviews';
   const K_SHIFTS = 'shared-shifts';
   const K_PLANS = 'shared-plan-overrides';
+  const K_TRANSFERS = 'shared-transfer-requests';
 
   // Захардкоженные супер-аккаунты. ВАЖНО: это НЕ безопасно — любой человек с этой
   // ссылкой может открыть код страницы (вид -> исходный код / F12) и увидеть эти
@@ -746,6 +757,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   let reviews = [];
   let shifts = [];
   let planOverrides = {};
+  let transferRequests = [];
   let shiftPeriodMode = 'month';
   let notifSeen = 0;
   let activeChannel = 'general';
@@ -844,6 +856,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     reviews = await getShared(K_REVIEWS, []);
     shifts = await getShared(K_SHIFTS, []);
     planOverrides = await getShared(K_PLANS, {});
+    transferRequests = await getShared(K_TRANSFERS, []);
   }
 
   // ---------- identity + roles ----------
@@ -1389,6 +1402,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <div class="field"><label>Ищет в странах</label><div class="val">${esc(c.countries)||'—'}</div></div>
           <div class="field"><label>Возраст мужчины</label><div class="val">${esc(c.ageRange)||'—'}</div></div>
         </div>
+        <div id="transferBox"></div>
         ${c.description?`<div class="block"><h4>О себе</h4><p>${esc(c.description)}</p></div>`:''}
         ${c.requirements?`<div class="block"><h4>Требования к партнёру</h4><p>${esc(c.requirements)}</p></div>`:''}
         <div class="block">
@@ -1521,6 +1535,44 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     if(c.login){
       const toggle = document.getElementById('toggleLogin'); const span = document.getElementById('loginMasked'); let shown=false;
       toggle.addEventListener('click', ()=>{ shown=!shown; span.textContent = shown?c.login:'••••••••••••••••'; toggle.textContent = shown?'скрыть':'показать'; });
+    }
+    // ---------- передача анкеты другому менеджеру ----------
+    {
+      const box = document.getElementById('transferBox');
+      const myOwnRequest = transferRequests.find(r=>r.clientId===c.id && r.status==='pending');
+      const otherManagers = () => [...new Set(clients.map(x=>String(x.manager||'').trim()).filter(m=>m && m!==c.manager))].sort();
+      if(myRole==='admin' || myRole==='curator'){
+        box.innerHTML = `<div class="block"><h4>Передать анкету другому менеджеру</h4>
+          <div class="field-row"><div class="field"><select class="in" id="tr_to"><option value="">— выбери менеджера —</option>${otherManagers().map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div>
+          <button class="btn primary sm" id="tr_go" style="align-self:flex-end;">Передать</button></div></div>`;
+        document.getElementById('tr_go').addEventListener('click', async ()=>{
+          const to = document.getElementById('tr_to').value;
+          if(!to) return;
+          const cc = liveC(); const from = cc.manager;
+          cc.manager = to;
+          await setShared(K_CLIENTS, clients);
+          await logActivity('note', `передал(а) анкету <b>${esc(cc.name)}</b> от «${esc(from||'—')}» менеджеру <b>${esc(to)}</b>`, cc.id);
+          renderAll(); openClient(id); showToast('Передано');
+        });
+      }else if(myRole==='manager' && c.manager===me){
+        if(myOwnRequest){
+          box.innerHTML = `<div class="block"><h4>Передача анкеты</h4><p style="font-size:12.8px; color:var(--muted);">Запрос на передачу менеджеру <b>${esc(myOwnRequest.toManager)}</b> отправлен, ждёт решения админа.</p></div>`;
+        }else{
+          box.innerHTML = `<div class="block"><h4>Передать анкету другому менеджеру</h4>
+            <p style="font-size:11.8px; color:var(--muted); margin:0 0 8px;">Нужно одобрение админа — анкета перейдёт только после подтверждения</p>
+            <div class="field-row"><div class="field"><select class="in" id="tr_to"><option value="">— выбери менеджера —</option>${otherManagers().map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}</select></div>
+            <button class="btn primary sm" id="tr_go" style="align-self:flex-end;">Запросить передачу</button></div></div>`;
+          document.getElementById('tr_go').addEventListener('click', async ()=>{
+            const to = document.getElementById('tr_to').value;
+            if(!to) return;
+            const cc = liveC();
+            transferRequests.push({id:uid(), clientId:cc.id, clientName:cc.name, fromManager:cc.manager, toManager:to, requestedBy:me, status:'pending', ts:Date.now()});
+            await setShared(K_TRANSFERS, transferRequests);
+            await logActivity('note', `запросил(а) передачу анкеты <b>${esc(cc.name)}</b> менеджеру <b>${esc(to)}</b> — ждёт одобрения админа`, cc.id);
+            renderAll(); openClient(id); showToast('Запрос отправлен, ждёт админа');
+          });
+        }
+      }
     }
     document.getElementById('overlay').classList.add('show');
   }
@@ -2269,6 +2321,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         list.push({ts:t.createdAt, text:`${t.createdBy} поставил(а) тебе задачу: «${t.title}»`, clientId:t.clientId});
       }
     });
+    transferRequests.forEach(r=>{
+      if(r.requestedBy===me && r.status!=='pending' && r.resolvedTs>notifSeen){
+        list.push({ts:r.resolvedTs, text:`Запрос на передачу «${r.clientName}» — ${r.status==='approved'?'одобрен ✅':'отклонён ❌'}`, clientId:r.clientId});
+      }
+    });
     return list.sort((a,b)=>b.ts-a.ts).slice(0,40);
   }
   function renderNotifBadge(){
@@ -2337,6 +2394,13 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       content.style.display='none'; return;
     }
     guard.innerHTML=''; content.style.display='';
+    const managerNamesInData = [...new Set(clients.map(c=>String(c.manager||'').trim()).filter(Boolean))].sort();
+    const fromSel = document.getElementById('renameFromSel');
+    if(fromSel){
+      const cur = fromSel.value;
+      fromSel.innerHTML = managerNamesInData.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');
+      if(managerNamesInData.includes(cur)) fromSel.value = cur;
+    }
     const total = clients.length, banned = clients.filter(c=>c.banned).length, problems = clients.filter(c=>c.stage==='problem').length, free = clients.filter(c=>!c.manager).length;
     document.getElementById('adminKpi').innerHTML = `
       <div class="kpi wine"><div class="bar"></div><div class="num">${total}</div><div class="lbl">Всего анкет</div></div>
@@ -2416,6 +2480,33 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       <div style="display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;">
         <span><b>${esc(c.name)}</b> — ${esc(c.problemNote)||'без описания'}</span><span style="color:var(--muted);">${esc(c.manager)}</span>
       </div>`).join('') : '<div class="empty" style="padding:20px;">Проблем нет — красота</div>';
+    const pendingTransfers = transferRequests.filter(r=>r.status==='pending');
+    document.getElementById('adminTransferRequests').innerHTML = pendingTransfers.length ? pendingTransfers.map(r=>`
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px;">
+        <span><b>${esc(r.requestedBy)}</b> хочет передать «${esc(r.clientName)}» → <b>${esc(r.toManager)}</b></span>
+        <span style="display:flex; gap:6px;">
+          <button class="btn primary sm" data-trapprove="${r.id}">Одобрить</button>
+          <button class="btn danger sm" data-trreject="${r.id}">Отклонить</button>
+        </span>
+      </div>`).join('') : '<div class="empty" style="padding:20px;">Запросов нет</div>';
+    document.querySelectorAll('#adminTransferRequests [data-trapprove]').forEach(btn=> btn.addEventListener('click', async ()=>{
+      const r = transferRequests.find(x=>x.id===btn.dataset.trapprove);
+      if(!r) return;
+      const c = clients.find(x=>x.id===r.clientId);
+      if(c){ c.manager = r.toManager; await setShared(K_CLIENTS, clients); }
+      r.status = 'approved'; r.resolvedTs = Date.now(); r.resolvedBy = me;
+      await setShared(K_TRANSFERS, transferRequests);
+      await logActivity('note', `одобрил(а) передачу анкеты <b>${esc(r.clientName)}</b> менеджеру <b>${esc(r.toManager)}</b>`, r.clientId);
+      renderAll(); showToast('Одобрено, анкета передана');
+    }));
+    document.querySelectorAll('#adminTransferRequests [data-trreject]').forEach(btn=> btn.addEventListener('click', async ()=>{
+      const r = transferRequests.find(x=>x.id===btn.dataset.trreject);
+      if(!r) return;
+      r.status = 'rejected'; r.resolvedTs = Date.now(); r.resolvedBy = me;
+      await setShared(K_TRANSFERS, transferRequests);
+      await logActivity('note', `отклонил(а) запрос на передачу анкеты <b>${esc(r.clientName)}</b>`, r.clientId);
+      renderAll(); showToast('Отклонено');
+    }));
   }
   // Excel-библиотека тяжёлая (~900кб) и нужна только когда реально жмут
   // "Экспорт" — грузим её по требованию, а не при каждом открытии сайта.
@@ -2442,6 +2533,19 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     await logActivity('note', `<b>очистил(а) всю базу анкет</b> — удалено ${count} анкет`);
     renderAll();
     showToast(`Удалено ${count} анкет. База пустая.`);
+  });
+  document.getElementById('renameManagerBtn').addEventListener('click', async ()=>{
+    const from = document.getElementById('renameFromSel').value;
+    const to = document.getElementById('renameToInput').value.trim();
+    if(!from || !to) return;
+    if(!confirm(`Переписать «${from}» на «${to}» во всех анкетах?`)) return;
+    let n = 0;
+    clients.forEach(c=>{ if(String(c.manager||'').trim()===from){ c.manager = to; n++; } });
+    await setShared(K_CLIENTS, clients);
+    await logActivity('note', `переименовал(а) менеджера «${esc(from)}» → «${esc(to)}» — поправлено ${n} анкет`);
+    document.getElementById('renameToInput').value='';
+    renderAll();
+    showToast(`Готово, поправлено анкет: ${n}`);
   });
   document.getElementById('cleanManagerNamesBtn').addEventListener('click', async ()=>{
     // Пробелы — не единственная причина дублей: "Саша" кириллицей и "Саша" с
@@ -2692,12 +2796,13 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function pollLoop(){
     setInterval(async ()=>{
       await touchPresence();
-      const [c,t,a,ev,pr,ro,pe,pa,pw,lg,ms,rv,sh,pl] = await Promise.all([
+      const [c,t,a,ev,pr,ro,pe,pa,pw,lg,ms,rv,sh,pl,tr] = await Promise.all([
         getShared(K_CLIENTS, clients), getShared(K_TASKS, tasks), getShared(K_ACTIVITY, activity),
         getShared(K_EVENTS, events), getShared(K_PRESENCE, presence), getShared(K_ROLES, roles),
         getShared(K_PEOPLE, people), getShared(K_PAYMENTS, payments),
         getShared(K_PASSWORDS, passwords), getShared(K_LEDGER, ledger), getShared(K_MESSAGES, messages),
-        getShared(K_REVIEWS, reviews), getShared(K_SHIFTS, shifts), getShared(K_PLANS, planOverrides)
+        getShared(K_REVIEWS, reviews), getShared(K_SHIFTS, shifts), getShared(K_PLANS, planOverrides),
+        getShared(K_TRANSFERS, transferRequests)
       ]);
       clients = isRecentLocalWrite(K_CLIENTS) ? clients : c;
       tasks = isRecentLocalWrite(K_TASKS) ? tasks : t;
@@ -2713,6 +2818,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       reviews = isRecentLocalWrite(K_REVIEWS) ? reviews : rv;
       shifts = isRecentLocalWrite(K_SHIFTS) ? shifts : sh;
       planOverrides = isRecentLocalWrite(K_PLANS) ? planOverrides : pl;
+      transferRequests = isRecentLocalWrite(K_TRANSFERS) ? transferRequests : tr;
       myRole = roles[me] || 'pending';
       isSuperAdmin = !!(ADMIN_ACCOUNTS[me] && ADMIN_ACCOUNTS[me].super);
       document.getElementById('navAdminBtn').style.display = myRole==='admin' ? '' : 'none';
