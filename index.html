@@ -1737,9 +1737,54 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     });
     document.querySelectorAll('#calGrid .cal-evt[draggable]').forEach(el=>{
       el.addEventListener('dragstart', (e)=>{ e.dataTransfer.setData('text/plain', el.dataset.evtId); e.stopPropagation(); });
-      el.addEventListener('click', (e)=> e.stopPropagation());
+      el.addEventListener('click', (e)=>{ e.stopPropagation(); openEditEventForm(el.dataset.evtId); });
     });
     renderUpcoming();
+  }
+  // Своё событие можно поправить или удалить — чужое можно только смотреть/
+  // перетаскивать (менять текст чужой записи в общем календаре — плохая идея).
+  function openEditEventForm(evtId){
+    const ev = events.find(x=>String(x.id)===String(evtId));
+    if(!ev) return;
+    const canEdit = ev.createdBy===me || myRole==='admin' || myRole==='curator';
+    if(!canEdit){ showToast(`Это событие ${ev.createdBy} — редактировать может только она или админ`); return; }
+    const modal = document.getElementById('modalBox');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-head"><div><h2>Событие</h2></div><button class="close-btn" id="closeEditEvt"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div class="modal-body">
+        <div class="field"><label>Название *</label><input class="in" id="ee_title" value="${esc(ev.title)}"></div>
+        <div class="field-row">
+          <div class="field"><label>Дата</label><input class="in" type="date" id="ee_date" value="${ev.date}"></div>
+          <div class="field"><label>Начало</label><input class="in" type="time" id="ee_start" value="${esc(ev.startTime||'')}"></div>
+          <div class="field"><label>Окончание</label><input class="in" type="time" id="ee_end" value="${esc(ev.endTime||'')}"></div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:6px;">
+          <button class="btn primary" id="ee_save">Сохранить</button>
+          <button class="btn danger" id="ee_delete">Удалить событие</button>
+        </div>
+      </div>`;
+    document.getElementById('closeEditEvt').addEventListener('click', closeModal);
+    attachDatePicker('ee_date');
+    document.getElementById('ee_save').addEventListener('click', async ()=>{
+      const title = document.getElementById('ee_title').value.trim();
+      const date = document.getElementById('ee_date').value;
+      if(!title || !date) return;
+      ev.title = title; ev.date = date;
+      ev.startTime = document.getElementById('ee_start').value;
+      ev.endTime = document.getElementById('ee_end').value;
+      await setShared(K_EVENTS, events);
+      await logActivity('event', `поправил(а) событие «${esc(title)}»`);
+      closeModal(); renderAll(); showToast('Сохранено');
+    });
+    document.getElementById('ee_delete').addEventListener('click', async ()=>{
+      if(!confirm(`Удалить событие «${ev.title}»?`)) return;
+      events = events.filter(x=>x.id!==ev.id);
+      await setShared(K_EVENTS, events);
+      await logActivity('event', `удалил(а) событие «${esc(ev.title)}»`);
+      closeModal(); renderAll(); showToast('Удалено');
+    });
+    document.getElementById('overlay').classList.add('show');
   }
   document.getElementById('calPrev').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()-1); renderCalendar(); });
   document.getElementById('calNext').addEventListener('click', ()=>{ calDate.setMonth(calDate.getMonth()+1); renderCalendar(); });
@@ -2725,7 +2770,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function myActiveShift(){ return shifts.find(s=>s.person===me && !s.endTs); }
   function renderShiftButton(){
     const btn = document.getElementById('shiftBtn');
-    if(myRole!=='manager'){ btn.style.display='none'; return; }
+    if(myRole!=='manager' && myRole!=='curator'){ btn.style.display='none'; return; }
     btn.style.display = '';
     const active = myActiveShift();
     if(active){
