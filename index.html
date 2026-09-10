@@ -1675,7 +1675,21 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       <div class="modal-body">
         <div class="field"><label>Название *</label><input class="in" id="t_title"></div>
         <div class="field-row">
-          <div class="field"><label>Исполнитель</label><input class="in" id="t_assignee" value="${esc(me)}"></div>
+          <div class="field"><label>Исполнитель</label>
+            <select class="in" id="t_assignee">
+              <option value="${esc(me)}">${esc(me)} (я)</option>
+              <optgroup label="Группы — задача создастся каждому">
+                <option value="__group_managers">👥 Все менеджеры</option>
+                <option value="__group_curators">👥 Все кураторы</option>
+                <option value="__group_regers">👥 Все регеры</option>
+                <option value="__group_admins">👥 Все админы</option>
+                <option value="__group_all">👥 Вся команда</option>
+              </optgroup>
+              <optgroup label="Конкретный человек">
+                ${[...new Set([...knownNames, ...people.map(p=>p.name), ...Object.keys(roles)])].filter(n=>n!==me).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+              </optgroup>
+            </select>
+          </div>
           <div class="field"><label>Дедлайн</label><input class="in" type="date" id="t_due"></div>
           <div class="field"><label>Приоритет</label><select class="in" id="t_priority"><option value="low">Низкий</option><option value="medium" selected>Средний</option><option value="high">Высокий</option></select></div>
         </div>
@@ -1686,13 +1700,23 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     document.getElementById('saveTask').addEventListener('click', async ()=>{
       const title = document.getElementById('t_title').value.trim();
       if(!title){ document.getElementById('t_title').focus(); return; }
-      const t = { id:uid(), title, assignee: document.getElementById('t_assignee').value.trim()||me,
-        dueDate: document.getElementById('t_due').value, priority: document.getElementById('t_priority').value,
-        status:'todo', clientId: document.getElementById('t_client').value || null, createdBy: me, createdAt: Date.now() };
-      tasks.unshift(t);
+      const picked = document.getElementById('t_assignee').value;
+      let assignees = [picked];
+      if(picked.startsWith('__group_')){
+        const groupRole = {__group_managers:'manager', __group_curators:'curator', __group_regers:'reger', __group_admins:'admin'}[picked];
+        assignees = groupRole
+          ? Object.keys(roles).filter(n=>roles[n]===groupRole)
+          : Object.keys(roles).filter(n=>roles[n] && roles[n]!=='pending');
+        if(!assignees.length){ showToast('В этой группе пока никого нет'); return; }
+      }
+      const dueDate = document.getElementById('t_due').value, priority = document.getElementById('t_priority').value;
+      const clientId = document.getElementById('t_client').value || null;
+      assignees.forEach(a=>{
+        tasks.unshift({ id:uid(), title, assignee:a, dueDate, priority, status:'todo', clientId, createdBy:me, createdAt:Date.now() });
+      });
       await setShared(K_TASKS, tasks);
-      await logActivity('task', `поставил(а) задачу «${esc(title)}» для ${esc(t.assignee)}`);
-      closeModal(); renderAll(); showToast('Задача создана');
+      await logActivity('task', assignees.length>1 ? `поставил(а) задачу «${esc(title)}» группе (${assignees.length} чел.)` : `поставил(а) задачу «${esc(title)}» для ${esc(assignees[0])}`);
+      closeModal(); renderAll(); showToast(assignees.length>1 ? `Задача создана для ${assignees.length} человек` : 'Задача создана');
     });
     document.getElementById('overlay').classList.add('show');
   });
@@ -2008,9 +2032,12 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const result = {};
     names.forEach(n=>{
       const r = raw[n]; const parts = [];
-      if(r.avgSearchMs!=null) parts.push(maxSe>minSe ? (maxSe-r.avgSearchMs)/(maxSe-minSe)*100 : 100);
-      if(r.avgCloseMs!=null) parts.push(maxCl>minCl ? (maxCl-r.avgCloseMs)/(maxCl-minCl)*100 : 100);
-      if(r.avgStars!=null) parts.push(maxS>minS ? (r.avgStars-minS)/(maxS-minS)*100 : (r.avgStars/5*100));
+      // Метрика считается только если в команде есть минимум 2 человека с
+      // данными по ней — иначе не с кем сравнивать, и раньше это ошибочно
+      // засчитывалось как "лучший результат", давая 100 на пустом месте.
+      if(r.avgSearchMs!=null && searchVals.length>=2) parts.push(maxSe>minSe ? (maxSe-r.avgSearchMs)/(maxSe-minSe)*100 : 50);
+      if(r.avgCloseMs!=null && closeVals.length>=2) parts.push(maxCl>minCl ? (maxCl-r.avgCloseMs)/(maxCl-minCl)*100 : 50);
+      if(r.avgStars!=null && starVals.length>=2) parts.push(maxS>minS ? (r.avgStars-minS)/(maxS-minS)*100 : (r.avgStars/5*100));
       result[n] = {...r, score: parts.length ? Math.round(parts.reduce((a,b)=>a+b,0)/parts.length) : null};
     });
     return result;
