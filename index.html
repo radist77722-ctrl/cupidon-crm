@@ -1773,16 +1773,17 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       const title = document.getElementById('ee_title').value.trim();
       const date = document.getElementById('ee_date').value;
       if(!title || !date) return;
-      ev.title = title; ev.date = date;
-      ev.startTime = document.getElementById('ee_start').value;
-      ev.endTime = document.getElementById('ee_end').value;
+      const liveEv = events.find(x=>String(x.id)===String(evtId)) || ev;
+      liveEv.title = title; liveEv.date = date;
+      liveEv.startTime = document.getElementById('ee_start').value;
+      liveEv.endTime = document.getElementById('ee_end').value;
       await setShared(K_EVENTS, events);
       await logActivity('event', `поправил(а) событие «${esc(title)}»`);
       closeModal(); renderAll(); showToast('Сохранено');
     });
     document.getElementById('ee_delete').addEventListener('click', async ()=>{
       if(!confirm(`Удалить событие «${ev.title}»?`)) return;
-      events = events.filter(x=>x.id!==ev.id);
+      events = events.filter(x=>String(x.id)!==String(evtId));
       await setShared(K_EVENTS, events);
       await logActivity('event', `удалил(а) событие «${esc(ev.title)}»`);
       closeModal(); renderAll(); showToast('Удалено');
@@ -2243,6 +2244,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
               <div style="flex:1; font-size:13px;"><b>${esc(n)}</b> — ${cnt} анкет</div>
               <input class="in" style="width:160px;" placeholder="настоящее имя" id="ghostTo-${esc(n)}">
               <button class="btn primary sm" data-ghostfix="${esc(n)}">Переименовать</button>
+              <button class="btn danger sm" data-ghostdel="${esc(n)}">Удалить анкеты</button>
             </div>`).join('')}
         </div>`;
       ghostBox.querySelectorAll('[data-ghostfix]').forEach(btn=> btn.addEventListener('click', async ()=>{
@@ -2255,6 +2257,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         await setShared(K_CLIENTS, clients);
         await logActivity('note', `переименовал(а) менеджера «${esc(from)}» → «${esc(to)}» — поправлено ${n} анкет`);
         renderAll(); showToast(`Готово, поправлено анкет: ${n}`);
+      }));
+      ghostBox.querySelectorAll('[data-ghostdel]').forEach(btn=> btn.addEventListener('click', async ()=>{
+        const from = btn.dataset.ghostdel;
+        const toDelete = clients.filter(c=>String(c.manager||'').trim()===from);
+        if(!confirm(`Удалить ВСЕ анкеты, записанные на «${from}» (${toDelete.length} шт.)? Это нельзя отменить.`)) return;
+        clients = clients.filter(c=>String(c.manager||'').trim()!==from);
+        await setShared(K_CLIENTS, clients);
+        await logActivity('note', `удалил(а) ${toDelete.length} анкет(ы), записанных на несуществующего менеджера «${esc(from)}»`);
+        renderAll(); showToast(`Удалено анкет: ${toDelete.length}`);
       }));
     }
   }
