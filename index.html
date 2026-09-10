@@ -513,6 +513,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><input id="searchInput" placeholder="Поиск по имени, городу, требованиям, телефону…"></div>
         <select id="managerFilter"><option value="">Все менеджеры</option></select>
         <select id="stageFilter"><option value="">Все этапы</option></select>
+        <select id="sortFilter"><option value="date_desc">Сначала новые</option><option value="date_asc">Сначала старые</option></select>
         <span class="count-tag" id="countTag"></span>
       </div>
       <div class="chips-row">
@@ -520,6 +521,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <button class="chip" data-quick="free">🆓 Свободные</button>
         <button class="chip" data-quick="banned">🚫 Забаненные</button>
         <button class="chip" data-quick="new24">🆕 Новые за сутки</button>
+        <button class="chip" data-quick="problem">🚩 Проблемные</button>
       </div>
       <div class="clients-grid" id="clientsGrid"></div>
     </section>
@@ -554,10 +556,6 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
         <div style="flex:1; min-width:0;">
           <div class="cal-grid cal-dow-row" id="calDow"></div>
           <div class="cal-grid" id="calGrid"></div>
-        </div>
-        <div class="card" style="width:250px; flex-shrink:0;">
-          <h3 class="section-title">Ближайшее</h3>
-          <div id="calUpcoming"></div>
         </div>
       </div>
     </section>
@@ -833,8 +831,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     try{ localStorage.setItem('cupidon:'+key, JSON.stringify(val)); }catch(e){}
   }
 
-  async function logActivity(action, detail, clientId){
-    const entry = {id:uid(), ts:Date.now(), user:me, action, detail, clientId: clientId||null};
+  async function logActivity(action, detail, clientId, broadcast){
+    const entry = {id:uid(), ts:Date.now(), user:me, action, detail, clientId: clientId||null, broadcast: !!broadcast};
     activity.unshift(entry); activity = activity.slice(0,300);
     await setShared(K_ACTIVITY, activity);
   }
@@ -1275,11 +1273,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       if(activeQuickFilters.has('free') && c.manager) return false;
       if(activeQuickFilters.has('banned') && !c.banned) return false;
       if(activeQuickFilters.has('new24') && (now - parseClientDate(c) > 86400000)) return false;
+      if(activeQuickFilters.has('problem') && c.stage!=='problem') return false;
       if(q){
         const hay = [c.name,c.city,c.countries,c.requirements,c.description,c.phone,c.manager].join(' ').toLowerCase();
         if(!hay.includes(q)) return false;
       }
       return true;
+    }).sort((a,b)=>{
+      const dir = document.getElementById('sortFilter').value==='date_asc' ? 1 : -1;
+      return dir * (parseClientDate(a) - parseClientDate(b));
     });
   }
   function renderClients(){
@@ -1299,13 +1301,14 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         </div>
         <div class="meta"><span>Ищет: ${esc(c.countries)||'—'}</span><span>· Возраст муж.: ${esc(c.ageRange)||'—'}</span></div>
         <div class="req">${esc(c.requirements)||esc(c.description)||'Требования не заполнены'}</div>
-        <div class="foot"><span>Менеджер: ${esc(c.manager)||'не назначен'}</span><span>${esc(c.date)||''}</span></div>
+        <div class="foot"><span>Менеджер: ${esc(c.manager)||'не назначен'}</span><span>${daysInWork(c)!=null?daysInWork(c)+' дн. в работе':esc(c.date)||''}</span></div>
       </div>`).join('') || `<div class="empty" style="grid-column:1/-1;"><span class="serif">Ничего не найдено</span>Измени фильтры или запрос</div>`;
     document.querySelectorAll('.cclient').forEach(el=> el.addEventListener('click', ()=> openClient(el.dataset.id)));
   }
   document.getElementById('searchInput').addEventListener('input', renderClients);
   document.getElementById('managerFilter').addEventListener('change', renderClients);
   document.getElementById('stageFilter').addEventListener('change', renderClients);
+  document.getElementById('sortFilter').addEventListener('change', renderClients);
   document.getElementById('addClientBtn').addEventListener('click', ()=> openClientForm());
 
   // ---- translation via Anthropic API ----
@@ -1378,7 +1381,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       <div class="modal-head">
         <div style="display:flex; gap:14px; align-items:center;">
           <div class="avatar" style="width:46px;height:46px;font-size:17px;">${initials(c.name)}</div>
-          <div><h2><span class="star" id="starToggle">${c.priority?'⭐':'☆'}</span>№${esc(c.num)||c.id} · ${esc(c.name)}</h2><div class="sub">${esc(c.city)||'—'}${c.age?' · '+esc(c.age)+' лет':''} · создана ${esc(c.date)||'—'}</div></div>
+          <div><h2><span class="star" id="starToggle">${c.priority?'⭐':'☆'}</span>№${esc(c.num)||c.id} · ${esc(c.name)}</h2><div class="sub">${esc(c.city)||'—'}${c.age?' · '+esc(c.age)+' лет':''} · создана ${esc(c.date)||'—'}${daysInWork(c)!=null?` · ${daysInWork(c)} дн. в работе`:''}</div></div>
         </div>
         <button class="close-btn" id="closeModal"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
@@ -1756,8 +1759,8 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="field"><label>Название *</label><input class="in" id="ee_title" value="${esc(ev.title)}"></div>
         <div class="field-row">
           <div class="field"><label>Дата</label><input class="in" type="date" id="ee_date" value="${ev.date}"></div>
-          <div class="field"><label>Начало</label><input class="in" type="time" id="ee_start" value="${esc(ev.startTime||'')}"></div>
-          <div class="field"><label>Окончание</label><input class="in" type="time" id="ee_end" value="${esc(ev.endTime||'')}"></div>
+          <div class="field"><label>Начало</label><input class="in" type="text" inputmode="numeric" placeholder="ЧЧ:ММ" id="ee_start" value="${esc(ev.startTime||'')}"></div>
+          <div class="field"><label>Окончание</label><input class="in" type="text" inputmode="numeric" placeholder="ЧЧ:ММ" id="ee_end" value="${esc(ev.endTime||'')}"></div>
         </div>
         <div style="display:flex; gap:10px; margin-top:6px;">
           <button class="btn primary" id="ee_save">Сохранить</button>
@@ -1795,12 +1798,16 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     modal.innerHTML = `
       <div class="modal-head" style="padding-bottom:0; border-bottom:none;"><div></div><button class="close-btn" id="closeModal4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div class="modal-body">
+        <div style="display:flex; gap:8px; padding:0 24px 12px;">
+          <button class="btn ghost sm" id="presetWork" type="button">🕐 Рабочий день</button>
+          <button class="btn ghost sm" id="presetOff" type="button">🏖 Выходной</button>
+        </div>
         <input class="quick-evt-title" id="e_title" placeholder="Название события" autofocus>
         <div class="quick-evt-row">
           <input type="date" id="e_date" value="${prefillDate || new Date().toISOString().slice(0,10)}">
-          <input type="time" id="e_start" value="09:00">
+          <input type="text" inputmode="numeric" placeholder="ЧЧ:ММ" id="e_start" value="09:00" style="width:64px;">
           <span class="quick-evt-dash">—</span>
-          <input type="time" id="e_end" value="10:00">
+          <input type="text" inputmode="numeric" placeholder="ЧЧ:ММ" id="e_end" value="10:00" style="width:64px;">
           <label style="display:flex; align-items:center; gap:6px; font-size:12.3px; color:var(--muted); cursor:pointer; margin-left:4px;"><input type="checkbox" id="e_allday"> весь день</label>
         </div>
         <div class="quick-evt-actions">
@@ -1819,13 +1826,29 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       document.getElementById('e_start').disabled = e.target.checked;
       document.getElementById('e_end').disabled = e.target.checked;
     });
+    // Два готовых пресета — чтобы не набирать "work"/"вых" руками каждый раз
+    document.getElementById('presetWork').addEventListener('click', ()=>{
+      document.getElementById('e_title').value = 'Рабочий день';
+      document.getElementById('e_allday').checked = false;
+      document.getElementById('e_start').disabled = false;
+      document.getElementById('e_end').disabled = false;
+      document.getElementById('e_start').focus();
+    });
+    document.getElementById('presetOff').addEventListener('click', async ()=>{
+      const date = document.getElementById('e_date').value;
+      if(!date) return;
+      events.push({id:uid(), title:'Выходной', date, startTime:'', endTime:'', createdBy:me});
+      await setShared(K_EVENTS, events);
+      await logActivity('event', `отметил(а) выходной на ${date}`);
+      closeModal(); renderAll(); showToast('Выходной добавлен');
+    });
     document.getElementById('saveEvent').addEventListener('click', async ()=>{
       const title = document.getElementById('e_title').value.trim();
       const date = document.getElementById('e_date').value;
       if(!title || !date) return;
       const allDay = document.getElementById('e_allday').checked;
-      const startTime = allDay ? '' : document.getElementById('e_start').value;
-      const endTime = allDay ? '' : document.getElementById('e_end').value;
+      const startTime = allDay ? '' : document.getElementById('e_start').value.trim();
+      const endTime = allDay ? '' : document.getElementById('e_end').value.trim();
       events.push({id:uid(), title, date, startTime, endTime, createdBy:me});
       await setShared(K_EVENTS, events);
       await logActivity('event', `добавил(а) событие «${esc(title)}» на ${date}${startTime?' в '+startTime:''}`);
@@ -1847,9 +1870,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_important"> 🔥 Это важное событие</label>
         <div class="field-row">
           <div class="field"><label>Дата и время начала</label><input class="in" type="date" id="fe_date_start" value="${d}"></div>
-          <div class="field"><label>&nbsp;</label><input class="in" type="time" id="fe_time_start" value="09:00"></div>
+          <div class="field"><label>&nbsp;</label><input class="in" type="text" inputmode="numeric" placeholder="ЧЧ:ММ" id="fe_time_start" value="09:00"></div>
           <div class="field"><label>Дата и время завершения</label><input class="in" type="date" id="fe_date_end" value="${d}"></div>
-          <div class="field"><label>&nbsp;</label><input class="in" type="time" id="fe_time_end" value="10:00"></div>
+          <div class="field"><label>&nbsp;</label><input class="in" type="text" inputmode="numeric" placeholder="ЧЧ:ММ" id="fe_time_end" value="10:00"></div>
         </div>
         <label style="display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted); cursor:pointer;"><input type="checkbox" id="fe_allday"> Весь день</label>
         <div class="field-row">
@@ -2000,6 +2023,14 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function fmtHours(ms){
     if(ms==null) return '—';
     return (ms/3600000).toFixed(1)+' ч';
+  }
+  // Сколько дней анкета реально "в работе" — считаем от момента, когда её
+  // взяли в подбор (если это уже зафиксировано), иначе от даты создания.
+  function daysInWork(c){
+    const startTs = c.workStartedAt || (c.date ? new Date(c.date+'T00:00:00').getTime() : null);
+    if(!startTs) return null;
+    const endTs = c.closedAt || Date.now();
+    return Math.max(0, Math.floor((endTs-startTs)/86400000));
   }
 
   // Раньше тут были только те, кто был в исходной таблице отчётности —
@@ -2394,7 +2425,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function computeNotifications(){
     const list = [];
     activity.forEach(a=>{
-      if(a.user===me || !a.clientId) return;
+      if(a.user===me) return;
+      if(a.broadcast && a.ts>notifSeen){
+        list.push({ts:a.ts, text:a.detail.replace(/<[^>]+>/g,''), clientId:a.clientId});
+      }
+      if(!a.clientId) return;
       const c = clients.find(x=>x.id===a.clientId);
       if(c && c.manager===me && a.ts>notifSeen){
         list.push({ts:a.ts, text:`${a.user}: ${a.detail.replace(/<[^>]+>/g,'')}`, clientId:a.clientId});
@@ -2542,12 +2577,14 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     }));
     document.querySelectorAll('#roleAssign [data-delperson]').forEach(btn=> btn.addEventListener('click', async ()=>{
       const n = btn.dataset.delperson;
-      if(!confirm(`Удалить пользователя ${n} из системы? Его анкеты и задачи останутся, но доступ пропадёт.`)) return;
+      const myAnketas = clients.filter(c=>String(c.manager||'').trim()===n);
+      if(!confirm(`Удалить пользователя ${n} из системы? Его анкеты (${myAnketas.length} шт.) освободятся и попадут в "Свободные" — всем придёт уведомление.`)) return;
       people = people.filter(p=>p.name!==n);
       delete roles[n]; delete passwords[n];
-      await Promise.all([setShared(K_PEOPLE, people), setShared(K_ROLES, roles), setShared(K_PASSWORDS, passwords)]);
-      await logActivity('note', `удалил(а) пользователя <b>${esc(n)}</b>`);
-      showToast('Пользователь удалён'); renderAdmin();
+      myAnketas.forEach(c=>{ c.manager = ''; });
+      await Promise.all([setShared(K_PEOPLE, people), setShared(K_ROLES, roles), setShared(K_PASSWORDS, passwords), setShared(K_CLIENTS, clients)]);
+      await logActivity('note', `удалил(а) пользователя <b>${esc(n)}</b> — её ${myAnketas.length} анкет(ы) освобождены и доступны всем`, null, true);
+      showToast('Пользователь удалён, анкеты освобождены'); renderAdmin(); renderAll();
     }));
     async function applyRole(name, role){
       roles[name] = role;
