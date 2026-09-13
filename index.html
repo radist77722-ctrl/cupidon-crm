@@ -2095,9 +2095,9 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         </div>
         <div class="field-row">
           <div class="field"><label>Факт: мошенников</label><input class="in" type="number" min="0" id="pe_scam" value="${m.scammers||0}"></div>
-          <div class="field"><label>Факт: часов за месяц</label><input class="in" type="number" min="0" id="pe_hours" value="${m.hoursMonth||0}"></div>
+          <div class="field"><label>Факт: заработано всего (₽)</label><input class="in" type="number" min="0" id="pe_earned" value="${m.earnedTotal||0}"></div>
         </div>
-        <div class="field"><label>Факт: заработано всего (₽)</label><input class="in" type="number" min="0" id="pe_earned" value="${m.earnedTotal||0}"></div>
+        <p style="font-size:11.8px; color:var(--muted); margin:0 0 4px;">Часы за месяц теперь считаются сами по кнопке «Начать/Закончить смену» — руками их больше не нужно поправлять.</p>
         <button class="btn primary" id="savePlan" style="align-self:flex-start;">Сохранить</button>
       </div>`;
     document.getElementById('closePlanModal').addEventListener('click', closeModal);
@@ -2106,7 +2106,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
       planOverrides[name] = {
         planAnk: num('pe_ank'), planMonth: num('pe_month'),
         factAnk: num('pe_fact_ank'), cleanMen: num('pe_clean'),
-        scammers: num('pe_scam'), hoursMonth: num('pe_hours'), earnedTotal: num('pe_earned'),
+        scammers: num('pe_scam'), earnedTotal: num('pe_earned'),
       };
       await setShared(K_PLANS, planOverrides);
       await logActivity('note', `поправил(а) план/факт для <b>${esc(name)}</b>`);
@@ -2127,10 +2127,15 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
   function renderManagers(){
     const metrics = computeManagerMetrics();
     const allManagers = getAllManagerEntries();
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
     document.getElementById('mgrGrid').innerHTML = allManagers.map(m=>{
       const pct = m.planAnk ? Math.min(100, Math.round(m.factAnk/m.planAnk*100)) : 0;
       const met = metrics[m.name] || {};
       const roleLabel = ROLE_LABEL[roles[m.name]] || 'Менеджер';
+      // Реальные часы за месяц — из фактических смен (кнопка "Начать/Закончить
+      // смену"), а не старое статичное число из первичной таблицы, которое
+      // никогда не обновлялось и вводило в заблуждение.
+      const realHoursMonth = computeShiftMs(m.name, monthStart, Date.now()) / 3600000;
       return `<div class="mgr-card">
         <div class="mgr-head"><div class="avatar" style="background:var(--wine);">${initials(m.name)}</div><div><div class="nm">${esc(m.name)}</div><div style="font-size:12px; color:var(--muted);">${esc(roleLabel)}</div></div>
           <div style="margin-left:auto; text-align:right;"><div style="font-family:'Inter',sans-serif; font-weight:700; font-size:22px; color:var(--gold);">${met.score!=null?met.score:'—'}</div><div style="font-size:10px; color:var(--muted);">рейтинг</div></div>
@@ -2140,7 +2145,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
         <div class="mgr-stats">
           <div class="st"><div class="n">${m.cleanMen}</div><div class="l">Чистых мужчин найдено</div></div>
           <div class="st"><div class="n">${m.scammers}</div><div class="l">Мошенников</div></div>
-          <div class="st"><div class="n">${m.hoursMonth} ч</div><div class="l">Часов за месяц</div></div>
+          <div class="st"><div class="n">${realHoursMonth.toFixed(1)} ч</div><div class="l">Часов за месяц (по сменам)</div></div>
           <div class="st"><div class="n">${m.earnedTotal.toLocaleString('ru-RU')} ₽</div><div class="l">Заработано всего</div></div>
         </div>
         <div class="mgr-stats" style="margin-top:8px;">
