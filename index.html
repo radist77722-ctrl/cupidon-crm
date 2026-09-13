@@ -543,7 +543,7 @@ textarea.note{width:100%; min-height:70px; border:1px solid var(--line); border-
 
     <section id="view-calendar" style="display:none;">
       <div class="topbar">
-        <div><h1>Календарь</h1><p>Клик по дню — быстро добавить событие. Дедлайны задач подтягиваются сами.</p></div>
+        <div><h1>Календарь</h1><p>Это твой личный календарь — чужой можно посмотреть на странице «Люди», открыв карточку человека. Клик по дню — быстро добавить событие.</p></div>
         <div class="cal-nav">
           <button id="calPrev">&larr;</button>
           <button class="cal-today-btn" id="calToday">Сегодня</button>
@@ -1740,8 +1740,11 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
     const todayStr = new Date().toISOString().slice(0,10);
     document.getElementById('calGrid').innerHTML = cells.map(cell=>{
       if(cell.other) return `<div class="cal-cell other"><div class="cal-daynum">${cell.d}</div></div>`;
-      const dayEvents = events.filter(e=>e.date===cell.date);
-      const dayTasks = tasks.filter(t=>t.dueDate===cell.date);
+      // Раньше показывались события ВСЕХ вместе — теперь у каждого свой личный
+      // календарь по умолчанию; чужой можно посмотреть только явно через
+      // "Люди" → человек → его календарь.
+      const dayEvents = events.filter(e=>e.date===cell.date && e.createdBy===me);
+      const dayTasks = tasks.filter(t=>t.dueDate===cell.date && t.assignee===me);
       const isToday = cell.date===todayStr;
       return `<div class="cal-cell ${isToday?'today':''}" data-date="${cell.date}"><div class="cal-daynum">${cell.d}</div>${dayEvents.map(e=>`<div class="cal-evt" draggable="true" data-evt-id="${e.id}" title="${esc(e.title)}">${e.startTime?esc(e.startTime)+' ':''}${esc(e.title)}</div>`).join('')}${dayTasks.map(t=>`<div class="cal-evt task" title="${esc(t.title)}">✓ ${esc(t.title)}</div>`).join('')}</div>`;
     }).join('');
@@ -2231,7 +2234,7 @@ window.__MANAGERS__ = [{"name": "Александра", "planAnk": 130, "factAnk
           <button class="btn ghost sm" data-pconfirm="${esc(n)}" data-role="reger">Как регера</button>
         </div>`;
       }
-      return `<div class="people-row" ${canConfirm?`data-open-person="${esc(n)}" style="cursor:pointer;"`:''}>
+      return `<div class="people-row" data-open-person="${esc(n)}" style="cursor:pointer;">
         <div class="avatar">${initials(n)}</div>
         <div class="people-main"><div class="people-name">${esc(n)}${n===me?' (ты)':''}</div><div class="people-count">${cnt} анкет в работе</div></div>
         ${pill('role-'+role, {['role-'+role]: ROLE_LABEL[role]})}
